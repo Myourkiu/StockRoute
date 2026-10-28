@@ -49,3 +49,11 @@ Erros cometidos pela IA durante o desenvolvimento e pegos antes de chegar à `ma
 - **Como foi pego:** o tamanho da imagem e um `du` no `node_modules` da imagem, antes do smoke.
 - **Correção:** `npm prune --omit=dev --omit=optional`. A imagem caiu para 379 MB e o `node_modules` de 386 MB para 100 MB.
 - **Lição:** conferir o que a imagem leva de fato (`du`, `ls node_modules/.bin`) em vez de confiar na flag; o smoke agora falha se o binário `prisma` aparecer.
+
+## 2026-10-28 — Testes que não checavam tipos (PR #7, verificação)
+
+- **Suposição:** como os testes rodam com ts-jest, um erro de tipo (ex.: contrato entre serviços quebrado) faria os testes falharem.
+- **O que aconteceu:** o `tsconfig.json` gerado pelo scaffold tem `isolatedModules: true`, e com isso o ts-jest só transpila, sem checar tipos. No PR de verificação #7, renomear um campo do `HealthResponse` passou no lint, nos testes unitários e nos e2e; só o `nest build`, último passo do CI, pegou. É a mesma causa do erro do `import type` da T02.
+- **Como foi pego:** o PR de verificação do CodeRabbit (#7), olhando em qual passo do CI ele falhou.
+- **Correção:** script `typecheck` (`tsc --noEmit`) e passo no CI logo depois do lint. O `tsconfig.json` raiz passou a incluir apps, libs e testes (antes só tinha referências, uma delas para um app do scaffold que já não existia). O typecheck pega o contrato quebrado nos 6 pontos e o `import type` faltando (TS1272).
+- **Lição:** saber o que cada passo do pipeline de fato garante; teste verde não significa tipos corretos.
