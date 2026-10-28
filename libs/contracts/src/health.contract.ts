@@ -5,6 +5,6 @@ export const HEALTH_PATTERN = { cmd: 'health' } as const;
 // Só existe "up": um serviço fora do ar não responde. O "down" é decidido
 // pelo gateway, quando a resposta não chega (erro ou timeout).
 export interface HealthResponse {
-  service: string;
+  name: string;
   status: 'up';
 }
