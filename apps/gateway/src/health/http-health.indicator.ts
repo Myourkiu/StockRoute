@@ -16,8 +16,14 @@ export class HttpHealthIndicator {
       .attempt(async ({ signal }) => {
         // O signal do terminus cancela a requisição no timeout.
         const response = await fetch(url, { signal });
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
+        try {
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+        } finally {
+          // Só o status interessa, mas o corpo precisa ser consumido ou
+          // cancelado: senão o undici segura a conexão a cada probe.
+          await response.body?.cancel();
         }
       })
       .withTimeout(HEALTH_TIMEOUT_MS);
