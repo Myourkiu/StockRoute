@@ -33,3 +33,11 @@ Erros cometidos pela IA durante o desenvolvimento e pegos antes de chegar à `ma
 - **Como foi pego:** leitura do código do `@nestjs/terminus` instalado antes de escrever o teste.
 - **Correção:** o teste usa tempo real (~1 s) e confere que o resultado chega antes de 1,5 s. Mudança aprovada no gate humano.
 - **Lição:** fake timers só controlam o que passa pelas APIs globais; conferir como a biblioteca mede o tempo antes de planejar o teste.
+
+## 2026-10-28 — Client do Prisma gerado com imports `.js` (PR 2)
+
+- **Suposição:** o generator `prisma-client` com `moduleFormat = "cjs"` geraria um client que o Jest carregaria direto.
+- **O que aconteceu:** o client gerado importa `./internal/class.js`, mas os arquivos são `.ts`. O ts-jest não faz esse mapeamento e a suíte nem chegou a rodar (`Cannot find module './internal/class.js'`).
+- **Como foi pego:** o teste de integração do catalog falhou ao carregar o módulo.
+- **Correção:** `importFileExtension = ""` no generator, que gera os imports sem extensão. Assim o ts-jest e o rspack resolvem os `.ts` direto.
+- **Lição:** código gerado também precisa ser exercitado pelos testes e pelo build antes de virar dependência.
