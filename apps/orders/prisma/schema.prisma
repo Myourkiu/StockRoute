@@ -1,0 +1,13 @@
+// Schema do orders. O domínio (pedidos e itens) chega na Etapa 3;
+// por ora só existe a migration inicial, que marca o ponto zero do histórico.
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+  // Imports sem extensão: o Jest (ts-jest) e o rspack resolvem os .ts direto.
+  importFileExtension = ""
+}
+
+datasource db {
+  provider = "postgresql"
+}
