@@ -1,2 +1,2 @@
 // Contratos compartilhados entre os serviços (mensagens e tipos de resposta).
-export {};
+export * from './health.contract';
