@@ -1,0 +1,46 @@
+{
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "resolvePackageJsonExports": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "declaration": true,
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "target": "ES2023",
+    "types": [
+      "node",
+      "jest"
+    ],
+    "sourceMap": true,
+    "outDir": "./dist",
+    "rootDir": ".",
+    "incremental": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "strictPropertyInitialization": false,
+    "paths": {
+      "@stockroute/contracts": [
+        "./libs/contracts/src"
+      ],
+      "@stockroute/contracts/*": [
+        "./libs/contracts/src/*"
+      ]
+    }
+  },
+  "files": [],
+  "references": [
+    {
+      "path": "./apps/stockroute/tsconfig.app.json"
+    },
+    {
+      "path": "./apps/gateway/tsconfig.app.json"
+    },
+    {
+      "path": "./apps/catalog/tsconfig.app.json"
+    }
+  ]
+}
