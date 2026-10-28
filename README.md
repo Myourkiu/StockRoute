@@ -8,9 +8,9 @@ Marketplace B2B de estudo: fornecedores publicam catálogos, lojistas buscam pro
 |---|---|---|
 | `gateway` | API HTTP pública | HTTP de fora; TCP para os serviços |
 | `catalog` | produtos, variações, estoque e busca | TCP |
-| `orders` | pedidos *(em construção)* | TCP |
-| `integration` | adaptador do ERP *(em construção)* | eventos e HTTP |
-| `erp-mock` | ERP simulado *(em construção)* | HTTP |
+| `orders` | pedidos | TCP |
+| `integration` | adaptador do ERP | TCP (eventos na Etapa 3) |
+| `erp-mock` | ERP simulado | só HTTP |
 
 Contratos compartilhados ficam em `libs/contracts` (`@stockroute/contracts`).
 
@@ -30,7 +30,7 @@ npm run test:e2e    # e2e e integração
 npm run build       # todos os apps
 ```
 
-Para subir o sistema inteiro em containers (Postgres, migrations, catalog e gateway):
+Para subir o sistema inteiro em containers (Postgres, migrations e os 5 serviços):
 
 ```bash
 docker compose up -d --build --wait
@@ -38,7 +38,7 @@ curl localhost:18000/health
 docker compose down      # mantém os dados; `down -v` apaga o volume do Postgres
 ```
 
-Só o gateway (`18000`) e o Postgres (`18432`, para inspeção local) ficam publicados no host. O `scripts/smoke.sh` sobe tudo, confere a saúde, a imagem de execução, as portas e um segundo `up` sem apagar dados.
+Só o gateway (`18000`) e o Postgres (`18432`, para inspeção local) ficam publicados no host. O `scripts/smoke.sh` sobe tudo, confere a saúde agregada (inclusive com um serviço parado), a imagem de execução, as portas e um segundo `up` sem apagar dados.
 
 Para rodar sem Docker, depois do build, cada processo num terminal:
 
@@ -52,6 +52,8 @@ node dist/apps/gateway/main.js   # HTTP 18000
 # Terminal 3, com os dois de pé
 curl localhost:18000/health
 ```
+
+Assim o `/health` responde 503, com `orders`, `integration` e `erp-mock` down, até que eles também estejam de pé (`dist/apps/<app>/main.js`). Os serviços com banco precisam do Postgres e das variáveis do `.env.example`.
 
 ## Endpoints de saúde
 

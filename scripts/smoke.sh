@@ -1,21 +1,50 @@
 #!/usr/bin/env bash
-# Smoke do sistema em containers: sobe tudo, confere a saúde agregada, o que a
-# imagem de execução leva, as portas publicadas e um segundo `up` sem apagar
-# dados. Uso: scripts/smoke.sh (precisa do Docker; termina com `down`, sem -v).
+# Smoke do sistema em containers: sobe os 5 serviços, confere a saúde agregada,
+# a falha de um serviço, o que a imagem de execução leva, as portas publicadas e
+# um segundo `up` sem apagar dados.
+# Uso: scripts/smoke.sh (precisa do Docker; termina com `down`, sem -v).
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+SERVICES=(catalog orders integration erp-mock)
 
 fail() { echo "FALHOU: $*" >&2; exit 1; }
 ok() { echo "ok: $*"; }
 
+# Status de um serviço na resposta do /health, ex.: service_status "$body" orders
+service_status() {
+  node -e 'const b = JSON.parse(process.argv[1]); console.log(b.details?.[process.argv[2]]?.status ?? "ausente")' "$1" "$2"
+}
+
 echo "== subindo o sistema"
-docker compose up -d --build --wait
+docker compose build
+started=$(date +%s)
+docker compose up -d --wait
+elapsed=$(( $(date +%s) - started ))
+[ "$elapsed" -lt 120 ] || fail "subida levou ${elapsed}s (limite 120s)"
+ok "todos ready em ${elapsed}s"
 
 echo "== saúde agregada"
-health=$(curl -s -w '\n%{http_code}' localhost:18000/health)
-[ "$(tail -n1 <<<"$health")" = 200 ] || fail "GET /health não respondeu 200: $health"
-grep -q '"catalog":{[^}]*"status":"up"' <<<"$health" || fail "catalog não está up: $health"
-ok "GET /health 200 com catalog up"
+code=$(curl -s -o /tmp/smoke-health.json -w '%{http_code}' localhost:18000/health)
+body=$(cat /tmp/smoke-health.json)
+[ "$code" = 200 ] || fail "GET /health respondeu $code: $body"
+for service in "${SERVICES[@]}"; do
+  [ "$(service_status "$body" "$service")" = up ] || fail "$service não está up: $body"
+done
+ok "GET /health 200 com os 4 serviços up"
+
+echo "== orders parado"
+docker compose stop orders
+code=$(curl -s -o /tmp/smoke-health.json -w '%{http_code}' localhost:18000/health)
+body=$(cat /tmp/smoke-health.json)
+[ "$code" = 503 ] || fail "com orders parado, GET /health respondeu $code: $body"
+[ "$(service_status "$body" orders)" = down ] || fail "orders não está down: $body"
+for service in catalog integration erp-mock; do
+  [ "$(service_status "$body" "$service")" = up ] || fail "$service não está up: $body"
+done
+ok "GET /health 503 com orders down e os demais up"
+docker compose start orders
+docker compose up -d --wait
 
 echo "== imagem de execução do catalog"
 docker compose run --rm --no-deps --entrypoint sh catalog -c '
@@ -26,19 +55,19 @@ docker compose run --rm --no-deps --entrypoint sh catalog -c '
 ok "sem CLI do Prisma, sem .ts e sem root"
 
 echo "== portas publicadas"
-for port in 18101 18201; do
-  if docker compose port catalog "$port" >/dev/null 2>&1; then
-    fail "catalog publica a porta $port no host"
-  fi
-done
-ok "catalog sem portas publicadas"
+published=$(docker compose ps --format '{{range .Publishers}}{{if .PublishedPort}}{{.PublishedPort}} {{end}}{{end}}' \
+  | tr ' ' '\n' | grep -v '^$' | sort -u | tr '\n' ' ')
+[ "$published" = "18000 18432 " ] || fail "portas publicadas: $published (esperado: 18000 18432)"
+ok "só 18000 (gateway) e 18432 (postgres) publicadas"
 
 echo "== down e up sem apagar dados"
 docker compose down
 docker compose up -d --wait
-docker compose logs catalog-migrate | grep -q 'No pending migrations to apply' \
-  || fail "catalog-migrate não reportou 'No pending migrations to apply'"
-ok "segundo up sem migrations pendentes"
+for migrate in catalog-migrate orders-migrate integration-migrate; do
+  docker compose logs "$migrate" | grep -q 'No pending migrations to apply' \
+    || fail "$migrate não reportou 'No pending migrations to apply'"
+done
+ok "segundo up sem migrations pendentes nos 3 serviços"
 
 docker compose down
 echo "smoke ok"

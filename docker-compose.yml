@@ -1,7 +1,7 @@
 # Sobe o sistema inteiro com `docker compose up --wait`. Só o gateway (18000) e
 # o Postgres (18432, para inspeção local) são publicados no host.
 # As senhas padrão são só de desenvolvimento; um .env sobrescreve (ver .env.example).
-# A senha do catalog entra literal na URL de conexão: use só [A-Za-z0-9_-] nela.
+# As senhas dos serviços entram literais nas URLs de conexão: use só [A-Za-z0-9_-].
 name: stockroute
 
 x-db-passwords: &db-passwords
@@ -11,6 +11,33 @@ x-db-passwords: &db-passwords
 
 x-catalog-db-url: &catalog-db-url
   CATALOG_DATABASE_URL: postgresql://catalog_svc:${CATALOG_DB_PASSWORD:-catalog_pw}@postgres:5432/${POSTGRES_DB:-stockroute}?schema=catalog
+
+x-orders-db-url: &orders-db-url
+  ORDERS_DATABASE_URL: postgresql://orders_svc:${ORDERS_DB_PASSWORD:-orders_pw}@postgres:5432/${POSTGRES_DB:-stockroute}?schema=orders
+
+x-integration-db-url: &integration-db-url
+  INTEGRATION_DATABASE_URL: postgresql://integration_svc:${INTEGRATION_DB_PASSWORD:-integration_pw}@postgres:5432/${POSTGRES_DB:-stockroute}?schema=integration
+
+# One-shot que aplica as migrations de um serviço e termina. É o mesmo papel de
+# um Job ou initContainer no Kubernetes (Etapa 5).
+x-migrate: &migrate
+  depends_on:
+    postgres:
+      condition: service_healthy
+  restart: 'no'
+
+# Healthcheck dos apps pelo /health/ready, na porta HTTP em HEALTH_PORT. Usa o
+# próprio Node, então a imagem não precisa de curl nem wget.
+x-ready-healthcheck: &ready-healthcheck
+  test:
+    - CMD
+    - node
+    - -e
+    - "fetch(`http://127.0.0.1:$${process.env.HEALTH_PORT}/health/ready`).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+  interval: 5s
+  timeout: 3s
+  retries: 12
+  start_period: 5s
 
 services:
   postgres:
@@ -35,9 +62,8 @@ services:
       timeout: 3s
       retries: 30
 
-  # One-shot: aplica as migrations do catalog e termina. É o mesmo papel de um
-  # Job ou initContainer no Kubernetes (Etapa 5).
   catalog-migrate:
+    <<: *migrate
     build:
       context: .
       target: migrator
@@ -45,10 +71,26 @@ services:
         APP: catalog
     environment:
       <<: *catalog-db-url
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: 'no'
+
+  orders-migrate:
+    <<: *migrate
+    build:
+      context: .
+      target: migrator
+      args:
+        APP: orders
+    environment:
+      <<: *orders-db-url
+
+  integration-migrate:
+    <<: *migrate
+    build:
+      context: .
+      target: migrator
+      args:
+        APP: integration
+    environment:
+      <<: *integration-db-url
 
   catalog:
     build:
@@ -60,19 +102,54 @@ services:
       <<: *catalog-db-url
       CATALOG_TCP_PORT: 18101
       CATALOG_HTTP_PORT: 18201
+      HEALTH_PORT: 18201
     depends_on:
       catalog-migrate:
         condition: service_completed_successfully
-    healthcheck:
-      test:
-        - CMD
-        - node
-        - -e
-        - "fetch('http://127.0.0.1:18201/health/ready').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
-      interval: 5s
-      timeout: 3s
-      retries: 12
-      start_period: 5s
+    healthcheck: *ready-healthcheck
+
+  orders:
+    build:
+      context: .
+      target: runtime
+      args:
+        APP: orders
+    environment:
+      <<: *orders-db-url
+      ORDERS_TCP_PORT: 18102
+      ORDERS_HTTP_PORT: 18202
+      HEALTH_PORT: 18202
+    depends_on:
+      orders-migrate:
+        condition: service_completed_successfully
+    healthcheck: *ready-healthcheck
+
+  integration:
+    build:
+      context: .
+      target: runtime
+      args:
+        APP: integration
+    environment:
+      <<: *integration-db-url
+      INTEGRATION_TCP_PORT: 18103
+      INTEGRATION_HTTP_PORT: 18203
+      HEALTH_PORT: 18203
+    depends_on:
+      integration-migrate:
+        condition: service_completed_successfully
+    healthcheck: *ready-healthcheck
+
+  erp-mock:
+    build:
+      context: .
+      target: runtime
+      args:
+        APP: erp-mock
+    environment:
+      ERP_MOCK_HTTP_PORT: 18204
+      HEALTH_PORT: 18204
+    healthcheck: *ready-healthcheck
 
   gateway:
     build:
@@ -82,22 +159,23 @@ services:
         APP: gateway
     environment:
       GATEWAY_HTTP_PORT: 18000
+      HEALTH_PORT: 18000
       CATALOG_TCP_HOST: catalog
       CATALOG_TCP_PORT: 18101
+      ORDERS_TCP_HOST: orders
+      ORDERS_TCP_PORT: 18102
+      INTEGRATION_TCP_HOST: integration
+      INTEGRATION_TCP_PORT: 18103
+      ERP_MOCK_URL: http://erp-mock:18204
     ports:
       - '18000:18000'
+    # Só ordem de subida: o readiness do gateway não depende dos serviços internos.
     depends_on:
       - catalog
-    healthcheck:
-      test:
-        - CMD
-        - node
-        - -e
-        - "fetch('http://127.0.0.1:18000/health/ready').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
-      interval: 5s
-      timeout: 3s
-      retries: 12
-      start_period: 5s
+      - orders
+      - integration
+      - erp-mock
+    healthcheck: *ready-healthcheck
 
 volumes:
   pgdata:

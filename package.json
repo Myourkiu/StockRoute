@@ -6,7 +6,7 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "prisma:generate": "prisma generate --config apps/catalog/prisma.config.ts",
+    "prisma:generate": "prisma generate --config apps/catalog/prisma.config.ts && prisma generate --config apps/orders/prisma.config.ts && prisma generate --config apps/integration/prisma.config.ts",
     "build": "nest build --all",
     "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\" \"*.ts\"",
     "format:check": "prettier --check \"apps/**/*.ts\" \"libs/**/*.ts\" \"*.ts\"",
