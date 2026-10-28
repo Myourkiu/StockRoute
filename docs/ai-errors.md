@@ -41,3 +41,11 @@ Erros cometidos pela IA durante o desenvolvimento e pegos antes de chegar à `ma
 - **Como foi pego:** o teste de integração do catalog falhou ao carregar o módulo.
 - **Correção:** `importFileExtension = ""` no generator, que gera os imports sem extensão. Assim o ts-jest e o rspack resolvem os `.ts` direto.
 - **Lição:** código gerado também precisa ser exercitado pelos testes e pelo build antes de virar dependência.
+
+## 2026-10-28 — `npm prune --omit=dev` não tirou o CLI do Prisma (PR 3)
+
+- **Suposição:** `npm prune --omit=dev` deixaria só as dependências de produção na imagem de execução, sem o `prisma` e o `typescript`, que são dev deps.
+- **O que aconteceu:** a imagem saiu com 750 MB, com o CLI do Prisma (41 MB) e o TypeScript (24 MB) dentro. Os dois são peers opcionais do `@prisma/client`, e o npm os marca como `devOptional` (dev ou opcional), que o `--omit=dev` não remove. Tentar `--omit=peer` também não resolveu.
+- **Como foi pego:** o tamanho da imagem e um `du` no `node_modules` da imagem, antes do smoke.
+- **Correção:** `npm prune --omit=dev --omit=optional`. A imagem caiu para 379 MB e o `node_modules` de 386 MB para 100 MB.
+- **Lição:** conferir o que a imagem leva de fato (`du`, `ls node_modules/.bin`) em vez de confiar na flag; o smoke agora falha se o binário `prisma` aparecer.
