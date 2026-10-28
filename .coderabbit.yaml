@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: pt-BR
+
+reviews:
+  profile: chill
+  # Os comentários não bloqueiam o merge: quem bloqueia é o CI.
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+  path_filters:
+    - '!**/package-lock.json'
+    - '!**/dist/**'
+    - '!apps/*/src/generated/**'
+  path_instructions:
+    - path: 'libs/contracts/**'
+      instructions: |
+        Contratos entre serviços (mensagens TCP e eventos). Toda mudança aqui é
+        mudança de contrato: aponte quebras de compatibilidade (campos removidos,
+        renomeados ou com tipo alterado) e quais serviços consomem o contrato.
+    - path: 'apps/*/prisma/**'
+      instructions: |
+        Schema e migrations do Prisma. Cada serviço só pode tocar o próprio
+        schema do Postgres (database per service). Aponte migrations destrutivas
+        (drop, rename, mudança de tipo) e alterações em migrations já aplicadas.
+    - path: 'infra/postgres/**'
+      instructions: |
+        Scripts de init do Postgres com roles e permissões. Confira que cada role
+        só alcança o próprio schema e que nada concede acesso ao schema de outro
+        serviço ou ao public.
+    - path: '.github/workflows/**'
+      instructions: |
+        Pipeline de CI. Aponte passos removidos (lint, testes, build), permissões
+        acima de contents: read e actions sem versão fixa.
+    - path: '**/*.spec.ts'
+      instructions: |
+        Testes unitários. Confira se os nomes descrevem o comportamento, se os
+        casos de erro e de borda estão cobertos e se os dublês substituem só a
+        fronteira (rede, banco), não a lógica em teste.
+    - path: '**/*-spec.ts'
+      instructions: |
+        Testes e2e e de integração. Confira se sobem dependências reais (TCP,
+        Postgres via Testcontainers) e se liberam recursos no afterAll.
+    - path: 'docs/**'
+      instructions: |
+        Documentação. Revise clareza e coerência com o código; não exija mudanças
+        de estilo.
+
+chat:
+  auto_reply: true
