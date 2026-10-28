@@ -16,7 +16,7 @@ describe('ProbesController (catalog)', () => {
       imports: [TerminusModule],
       controllers: [ProbesController],
       // Liveness e 404 não tocam o banco; o readiness com banco é coberto no
-      // teste de integração (test/integration/catalog-db.int-spec.ts).
+      // teste de integração (test/integration/service-db.int-spec.ts).
       providers: [{ provide: PrismaService, useValue: {} }],
     }).compile();
     app = moduleRef.createNestApplication();
