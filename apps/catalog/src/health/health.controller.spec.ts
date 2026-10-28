@@ -46,7 +46,7 @@ describe('HealthController (TCP)', () => {
       client.send<HealthResponse>(HEALTH_PATTERN, {}),
     );
 
-    expect(response).toEqual({ service: 'catalog', status: 'up' });
+    expect(response).toEqual({ service: 'catalogo', status: 'up' });
   });
 
   it('rejeita padrão desconhecido com erro de handler inexistente', async () => {
