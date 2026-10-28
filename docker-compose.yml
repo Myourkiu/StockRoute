@@ -1,0 +1,103 @@
+# Sobe o sistema inteiro com `docker compose up --wait`. Só o gateway (18000) e
+# o Postgres (18432, para inspeção local) são publicados no host.
+# As senhas padrão são só de desenvolvimento; um .env sobrescreve (ver .env.example).
+# A senha do catalog entra literal na URL de conexão: use só [A-Za-z0-9_-] nela.
+name: stockroute
+
+x-db-passwords: &db-passwords
+  CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:-catalog_pw}
+  ORDERS_DB_PASSWORD: ${ORDERS_DB_PASSWORD:-orders_pw}
+  INTEGRATION_DB_PASSWORD: ${INTEGRATION_DB_PASSWORD:-integration_pw}
+
+x-catalog-db-url: &catalog-db-url
+  CATALOG_DATABASE_URL: postgresql://catalog_svc:${CATALOG_DB_PASSWORD:-catalog_pw}@postgres:5432/${POSTGRES_DB:-stockroute}?schema=catalog
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin_pw}
+      POSTGRES_DB: ${POSTGRES_DB:-stockroute}
+      <<: *db-passwords
+    ports:
+      # Só na interface local: o banco não fica acessível a outras máquinas.
+      - '127.0.0.1:18432:5432'
+    volumes:
+      # A partir do Postgres 18 os dados ficam em /var/lib/postgresql/<versão>.
+      - pgdata:/var/lib/postgresql
+      # Só roda com o volume vazio: mudar roles ou schemas exige recriar o volume.
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # -h força TCP: no primeiro start, o servidor temporário que roda os scripts
+      # de init só aceita socket, e o healthcheck não pode aprová-lo.
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U postgres -d $${POSTGRES_DB}']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # One-shot: aplica as migrations do catalog e termina. É o mesmo papel de um
+  # Job ou initContainer no Kubernetes (Etapa 5).
+  catalog-migrate:
+    build:
+      context: .
+      target: migrator
+      args:
+        APP: catalog
+    environment:
+      <<: *catalog-db-url
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  catalog:
+    build:
+      context: .
+      target: runtime
+      args:
+        APP: catalog
+    environment:
+      <<: *catalog-db-url
+      CATALOG_TCP_PORT: 18101
+      CATALOG_HTTP_PORT: 18201
+    depends_on:
+      catalog-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:18201/health/ready').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+  gateway:
+    build:
+      context: .
+      target: runtime
+      args:
+        APP: gateway
+    environment:
+      GATEWAY_HTTP_PORT: 18000
+      CATALOG_TCP_HOST: catalog
+      CATALOG_TCP_PORT: 18101
+    ports:
+      - '18000:18000'
+    depends_on:
+      - catalog
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:18000/health/ready').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+volumes:
+  pgdata:
