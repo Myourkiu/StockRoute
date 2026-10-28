@@ -3,6 +3,7 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { TerminusModule } from '@nestjs/terminus';
 import { CATALOG_CLIENT } from './health.constants';
 import { HealthController } from './health.controller';
+import { ProbesController } from './probes.controller';
 import { ServiceHealthIndicator } from './service-health.indicator';
 
 @Module({
@@ -23,7 +24,7 @@ import { ServiceHealthIndicator } from './service-health.indicator';
       },
     ]),
   ],
-  controllers: [HealthController],
+  controllers: [HealthController, ProbesController],
   providers: [ServiceHealthIndicator],
 })
 export class HealthModule {}
