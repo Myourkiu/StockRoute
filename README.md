@@ -29,11 +29,16 @@ npm run test:e2e    # e2e e integração
 npm run build       # todos os apps
 ```
 
-Para rodar localmente, depois do build:
+Para rodar localmente, depois do build, cada processo num terminal:
 
 ```bash
+# Terminal 1
 node dist/apps/catalog/main.js   # TCP 18101, HTTP interno 18201
+
+# Terminal 2
 node dist/apps/gateway/main.js   # HTTP 18000
+
+# Terminal 3, com os dois de pé
 curl localhost:18000/health
 ```
 
