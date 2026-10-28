@@ -4,6 +4,7 @@ import { CatalogModule } from './catalog.module';
 
 // App híbrida: TCP para as mensagens do gateway e HTTP interno para as probes.
 async function bootstrap() {
+  debugger;
   const app = await NestFactory.create(CatalogModule);
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.TCP,
