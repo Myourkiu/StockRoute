@@ -31,16 +31,5 @@
       ]
     }
   },
-  "files": [],
-  "references": [
-    {
-      "path": "./apps/stockroute/tsconfig.app.json"
-    },
-    {
-      "path": "./apps/gateway/tsconfig.app.json"
-    },
-    {
-      "path": "./apps/catalog/tsconfig.app.json"
-    }
-  ]
+  "include": ["apps", "libs", "test", "*.ts"]
 }
