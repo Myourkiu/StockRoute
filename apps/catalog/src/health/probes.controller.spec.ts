@@ -3,10 +3,11 @@ import { TerminusModule } from '@nestjs/terminus';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
+import { PrismaService } from '../prisma/prisma.service';
 import { ProbesController } from './probes.controller';
 
-// Probes HTTP internas do catalog. O readiness com banco entra na T06; aqui
-// fica só o que já vale hoje: liveness sem dependências e rota inexistente.
+// Probes HTTP internas do catalog, sem banco: liveness sem dependências e rota
+// inexistente.
 describe('ProbesController (catalog)', () => {
   let app: INestApplication<App>;
 
@@ -14,6 +15,9 @@ describe('ProbesController (catalog)', () => {
     const moduleRef = await Test.createTestingModule({
       imports: [TerminusModule],
       controllers: [ProbesController],
+      // Liveness e 404 não tocam o banco; o readiness com banco é coberto no
+      // teste de integração (test/integration/catalog-db.int-spec.ts).
+      providers: [{ provide: PrismaService, useValue: {} }],
     }).compile();
     app = moduleRef.createNestApplication();
     await app.init();

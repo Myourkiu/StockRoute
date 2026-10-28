@@ -33,6 +33,10 @@ jobs:
       - name: Install
         run: npm ci
 
+      # O client do Prisma é gerado, não versionado: lint, testes e build dependem dele.
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+
       # Lint e formatação vêm antes dos testes: falham rápido e barato.
       - name: Lint
         run: npm run lint

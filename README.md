@@ -23,6 +23,7 @@ Contratos compartilhados ficam em `libs/contracts` (`@stockroute/contracts`).
 
 ```bash
 npm ci
+npm run prisma:generate   # gera o client do Prisma (não versionado)
 npm run lint
 npm run test        # unitários
 npm run test:e2e    # e2e e integração

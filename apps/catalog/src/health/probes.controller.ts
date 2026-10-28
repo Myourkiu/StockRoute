@@ -1,11 +1,22 @@
 import { Controller, Get } from '@nestjs/common';
-import { HealthCheck, HealthCheckService } from '@nestjs/terminus';
+import {
+  HealthCheck,
+  HealthCheckService,
+  HealthIndicatorService,
+} from '@nestjs/terminus';
+import { PrismaService } from '../prisma/prisma.service';
 
-// Probes HTTP internas do catalog: liveness sem dependências; o readiness passa
-// a verificar o banco na T06.
+const DATABASE_TIMEOUT_MS = 1000;
+
+// Probes HTTP internas do catalog. Liveness não olha o banco: se olhasse, um
+// banco fora faria o orquestrador reiniciar um processo saudável em loop.
 @Controller('health')
 export class ProbesController {
-  constructor(private readonly health: HealthCheckService) {}
+  constructor(
+    private readonly health: HealthCheckService,
+    private readonly indicator: HealthIndicatorService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Get('live')
   @HealthCheck()
@@ -13,9 +24,18 @@ export class ProbesController {
     return this.health.check([]);
   }
 
+  // Readiness depende do banco: sem ele, o catalog não atende ninguém.
   @Get('ready')
   @HealthCheck()
   ready() {
-    return this.health.check([]);
+    return this.health.check([
+      () =>
+        this.indicator
+          .check('database')
+          .attempt(async () => {
+            await this.prisma.$queryRaw`SELECT 1`;
+          })
+          .withTimeout(DATABASE_TIMEOUT_MS),
+    ]);
   }
 }
