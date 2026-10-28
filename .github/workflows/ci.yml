@@ -1,0 +1,47 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Um push novo na mesma branch cancela a execução anterior.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # O nome do job é o check exigido pela proteção da main.
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # Lint e formatação vêm antes dos testes: falham rápido e barato.
+      - name: Lint
+        run: npm run lint
+
+      - name: Format
+        run: npm run format:check
+
+      - name: Unit tests
+        run: npm run test
+
+      # O runner tem Docker, então os testes com Testcontainers rodam aqui.
+      - name: E2E and integration tests
+        run: npm run test:e2e
+
+      - name: Build
+        run: npm run build
