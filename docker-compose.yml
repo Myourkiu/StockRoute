@@ -1,6 +1,7 @@
 # Sobe o sistema inteiro com `docker compose up --wait`. Só o gateway (18000) e
 # o Postgres (18432, para inspeção local) são publicados no host.
 # As senhas padrão são só de desenvolvimento; um .env sobrescreve (ver .env.example).
+# A senha do catalog entra literal na URL de conexão: use só [A-Za-z0-9_-] nela.
 name: stockroute
 
 x-db-passwords: &db-passwords
@@ -19,14 +20,17 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-stockroute}
       <<: *db-passwords
     ports:
-      - '18432:5432'
+      # Só na interface local: o banco não fica acessível a outras máquinas.
+      - '127.0.0.1:18432:5432'
     volumes:
       # A partir do Postgres 18 os dados ficam em /var/lib/postgresql/<versão>.
       - pgdata:/var/lib/postgresql
       # Só roda com o volume vazio: mudar roles ou schemas exige recriar o volume.
       - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U postgres -d $${POSTGRES_DB}']
+      # -h força TCP: no primeiro start, o servidor temporário que roda os scripts
+      # de init só aceita socket, e o healthcheck não pode aprová-lo.
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U postgres -d $${POSTGRES_DB}']
       interval: 2s
       timeout: 3s
       retries: 30
