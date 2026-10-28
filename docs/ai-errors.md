@@ -25,3 +25,11 @@ Erros cometidos pela IA durante o desenvolvimento e pegos antes de chegar à `ma
 - **Como foi pego:** `npm run build` (sai com código 1, então o CI também pegaria).
 - **Correção:** `import { HEALTH_PATTERN, type HealthResponse }`.
 - **Lição:** testes verdes não garantem build verde; os dois rodam no CI. Pendente: regra do oxlint que obrigue `import type`.
+
+## 2026-10-28 — Fake timers para o timeout do terminus (T03)
+
+- **Suposição:** o TASKS previa testar o timeout de 1 s do indicador com fake timers do Jest, avançando o relógio.
+- **O que aconteceu:** o `withTimeout` do terminus 12 usa `AbortSignal.timeout()`, que roda nos timers internos do Node. O Jest só substitui os timers globais (`setTimeout` e afins), então avançar o relógio não dispara o timeout.
+- **Como foi pego:** leitura do código do `@nestjs/terminus` instalado antes de escrever o teste.
+- **Correção:** o teste usa tempo real (~1 s) e confere que o resultado chega antes de 1,5 s. Mudança aprovada no gate humano.
+- **Lição:** fake timers só controlam o que passa pelas APIs globais; conferir como a biblioteca mede o tempo antes de planejar o teste.
