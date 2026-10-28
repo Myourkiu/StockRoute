@@ -30,7 +30,17 @@ npm run test:e2e    # e2e e integração
 npm run build       # todos os apps
 ```
 
-Para rodar localmente, depois do build, cada processo num terminal:
+Para subir o sistema inteiro em containers (Postgres, migrations, catalog e gateway):
+
+```bash
+docker compose up -d --build --wait
+curl localhost:18000/health
+docker compose down      # mantém os dados; `down -v` apaga o volume do Postgres
+```
+
+Só o gateway (`18000`) e o Postgres (`18432`, para inspeção local) ficam publicados no host. O `scripts/smoke.sh` sobe tudo, confere a saúde, a imagem de execução, as portas e um segundo `up` sem apagar dados.
+
+Para rodar sem Docker, depois do build, cada processo num terminal:
 
 ```bash
 # Terminal 1
