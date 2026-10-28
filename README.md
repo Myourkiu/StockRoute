@@ -25,6 +25,7 @@ Contratos compartilhados ficam em `libs/contracts` (`@stockroute/contracts`).
 npm ci
 npm run prisma:generate   # gera o client do Prisma (não versionado)
 npm run lint
+npm run typecheck   # tipos de apps, libs e testes (os testes não checam tipos)
 npm run test        # unitários
 npm run test:e2e    # e2e e integração
 npm run build       # todos os apps
@@ -65,4 +66,4 @@ Assim o `/health` responde 503, com `orders`, `integration` e `erp-mock` down, a
 
 ## Fluxo de contribuição
 
-Toda mudança entra por PR. O CI (lint, formatação, testes unitários, e2e e build) precisa passar, e o CodeRabbit revisa em PT-BR. Erros da IA pegos no caminho ficam em [`docs/ai-errors.md`](docs/ai-errors.md).
+Toda mudança entra por PR. O CI (lint, formatação, typecheck, testes unitários, e2e e build) precisa passar, e o CodeRabbit revisa em PT-BR. Erros da IA pegos no caminho ficam em [`docs/ai-errors.md`](docs/ai-errors.md).
