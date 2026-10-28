@@ -1,0 +1,14 @@
+# Só o necessário para o build entra no contexto do Docker.
+.git
+.github
+node_modules
+dist
+coverage
+apps/*/src/generated
+.env
+.env.*
+!.env.example
+*.md
+docs
+test
+scripts
