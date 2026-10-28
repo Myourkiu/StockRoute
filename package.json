@@ -8,6 +8,7 @@
   "scripts": {
     "build": "nest build --all",
     "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\" \"*.ts\"",
+    "format:check": "prettier --check \"apps/**/*.ts\" \"libs/**/*.ts\" \"*.ts\"",
     "start:dev": "nest start --watch",
     "lint": "oxlint --type-aware --deny-warnings apps/ libs/",
     "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js",
