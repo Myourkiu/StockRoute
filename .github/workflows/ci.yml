@@ -44,6 +44,11 @@ jobs:
       - name: Format
         run: npm run format:check
 
+      # Os testes não checam tipos: com isolatedModules, o ts-jest só transpila.
+      # Sem este passo, um contrato quebrado só aparecia no build, no fim.
+      - name: Typecheck
+        run: npm run typecheck
+
       - name: Unit tests
         run: npm run test
 
