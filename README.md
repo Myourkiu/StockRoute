@@ -34,6 +34,7 @@ npm run build       # todos os apps
 Para subir o sistema inteiro em containers (Postgres, migrations e os 5 serviços):
 
 ```bash
+cp .env.example .env     # o Compose exige JWT_SECRET; troque o valor de exemplo
 docker compose up -d --build --wait
 curl localhost:18000/health
 docker compose down      # mantém os dados; `down -v` apaga o volume do Postgres
@@ -66,7 +67,7 @@ Assim o `/health` responde 503, com `orders`, `integration` e `erp-mock` down, a
 
 ## Produtos
 
-Toda rota de `/products` exige um JWT (`Authorization: Bearer <token>`). Não há login nesta etapa: o `npm run token` assina um token com o mesmo `JWT_SECRET` do gateway (`.env` ou ambiente).
+Toda rota de `/products` exige um JWT (`Authorization: Bearer <token>`). Não há login nesta etapa: o `npm run token` assina um token com o `JWT_SECRET` do `.env` (ou do ambiente), que precisa ser o mesmo do gateway. Sem `.env`, copie o `.env.example` antes.
 
 ```bash
 npm run token -- supplier 11111111-1111-4111-8111-111111111111   # Fornecedor Alfa
@@ -85,7 +86,7 @@ Os dois fornecedores vêm de uma migration de seed.
 | `POST /products/:id/variants` | dono | adiciona uma variante |
 | `PATCH /products/:id/variants/:sku` | dono | edita atributos, preço ou quantidade mínima |
 
-Valores em centavos inteiros (`wholesalePriceCents`). O estoque não é editável pela API. Sem token ou com token inválido a resposta é 401; papel errado, 403; produto de outro fornecedor responde 404, igual a um inexistente.
+Valores em centavos inteiros (`wholesalePriceCents`). O estoque não é editável pela API. Sem token ou com token inválido a resposta é 401; papel errado, 403. Editar ou desativar produto de outro fornecedor responde 404, igual a um inexistente, e o mesmo vale para ler um produto inativo de outro fornecedor. Produto ativo é visível para qualquer token.
 
 ## Fluxo de contribuição
 
