@@ -15,7 +15,8 @@ export class PrismaService extends PrismaClient implements OnModuleDestroy {
           connectionTimeoutMillis: 1000,
           // O timeout do terminus abandona a promise, mas não cancela a query:
           // sem este limite, uma query travada seguraria a conexão do pool.
-          // Vale para o pool inteiro; rever quando o domínio chegar (Etapa 2).
+          // Vale para o pool inteiro. Revisto na Etapa 2: as queries do domínio
+          // são por chave ou índice e ficam bem abaixo de 1 s.
           query_timeout: 1000,
         },
         { schema: 'catalog' },

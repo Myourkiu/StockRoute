@@ -57,3 +57,29 @@ Erros cometidos pela IA durante o desenvolvimento e pegos antes de chegar à `ma
 - **Como foi pego:** o PR de verificação do CodeRabbit (#7), olhando em qual passo do CI ele falhou.
 - **Correção:** script `typecheck` (`tsc --noEmit`) e passo `Typecheck` no CI, depois de `Format` e antes de `Unit tests`. O `tsconfig.json` raiz passou a incluir apps, libs e testes (antes só tinha referências, uma delas para um app do scaffold que já não existia). O typecheck pega o contrato quebrado nos 6 pontos e o `import type` faltando (TS1272).
 - **Lição:** saber o que cada passo do pipeline de fato garante; teste verde não significa tipos corretos.
+
+## 2026-10-30 — Import padrão de um pacote ESM-only (Etapa 2, fatia 1)
+
+- **Suposição:** o script `scripts/issue-token.mjs` poderia fazer `import jwt from '@nestjs/jwt'` e usar `jwt.JwtService`, como se o pacote fosse CommonJS (onde o import padrão devolve o `module.exports`).
+- **O que aconteceu:** o `@nestjs/jwt` 12 é ESM-only, como o resto do Nest 12, e não tem export padrão. O script quebrou com `does not provide an export named 'default'`.
+- **Como foi pego:** o teste do `AuthGuard` que roda o script de verdade e valida o token gerado.
+- **Correção:** `import { JwtService } from '@nestjs/jwt'`.
+- **Lição:** no Nest 12 todos os pacotes `@nestjs/*` são ESM; um teste que executa o script (e não só a função) pega esse tipo de erro de carga.
+
+## 2026-10-30 — Validações que "pulam" casos (PR #9, CodeRabbit)
+
+- **Suposição:** `@IsOptional()` nos DTOs de edição e `verifyAsync` com `algorithms: ['HS256']` no `AuthGuard` bastariam para barrar entrada inválida e token sem validade.
+- **O que aconteceu:**
+  - o `@IsOptional()` pula as outras validações também para `null`, então um `PATCH { "name": null }` chegava ao Prisma e virava 500;
+  - inteiros sem limite superior (`3000000000`) estouravam a coluna `integer`, também 500;
+  - o `jsonwebtoken` só checa `exp` quando a claim existe, então um token sem `exp` nunca expiraria;
+  - o Compose tinha um `JWT_SECRET` padrão versionado, o que deixava qualquer um que alcançasse a porta 18000 assinar tokens válidos.
+- **Como foi pego:** revisão do CodeRabbit no PR #9.
+- **Correção:**
+  - `ValidateIf(value !== undefined)` no lugar do `IsOptional`;
+  - `@Max(2^31 - 1)` nos inteiros;
+  - o guard exige `exp` numérico;
+  - o Compose exige `JWT_SECRET`, sem padrão.
+
+  Cada correção ganhou o teste que faltava.
+- **Lição:** ler o que a validação de uma biblioteca *não* faz (os casos em que ela pula), e não só o que ela faz; erro de entrada que vira 500 é sinal de validação incompleta na borda.

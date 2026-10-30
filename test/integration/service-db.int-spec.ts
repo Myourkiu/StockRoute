@@ -1,8 +1,6 @@
 import type { INestApplication, Type } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { Client } from 'pg';
 import request from 'supertest';
 import type { App } from 'supertest/types';
@@ -14,39 +12,40 @@ import {
   startPostgres,
   type ServiceRole,
 } from './postgres-container';
-
-const exec = promisify(execFile);
+import { migrateDeploy } from './prisma-migrate';
 
 // Os três serviços com dados seguem o mesmo padrão: migrations aplicadas com o
 // role do serviço no schema dele (CA02, CA09) e readiness enxergando o banco
 // (CA06, CA07). Cada serviço roda contra um Postgres real com o script de init.
-const services: { name: string; role: ServiceRole; module: Type }[] = [
-  { name: 'catalog', role: 'catalog_svc', module: CatalogModule },
-  { name: 'orders', role: 'orders_svc', module: OrdersModule },
-  { name: 'integration', role: 'integration_svc', module: IntegrationModule },
+// `migrations` é quantas o histórico de cada serviço tem hoje.
+const services: {
+  name: string;
+  role: ServiceRole;
+  module: Type;
+  migrations: number;
+}[] = [
+  {
+    name: 'catalog',
+    role: 'catalog_svc',
+    module: CatalogModule,
+    migrations: 3,
+  },
+  { name: 'orders', role: 'orders_svc', module: OrdersModule, migrations: 1 },
+  {
+    name: 'integration',
+    role: 'integration_svc',
+    module: IntegrationModule,
+    migrations: 1,
+  },
 ];
 
 describe.each(services)(
   '$name + Postgres (integração)',
-  ({ name, role, module }) => {
+  ({ name, role, module, migrations }) => {
     const envVar = `${name.toUpperCase()}_DATABASE_URL`;
     let container: StartedPostgreSqlContainer;
     let app: INestApplication<App>;
     let databaseUrl: string;
-
-    function migrateDeploy() {
-      return exec(
-        process.execPath,
-        [
-          'node_modules/prisma/build/index.js',
-          'migrate',
-          'deploy',
-          '--config',
-          `apps/${name}/prisma.config.ts`,
-        ],
-        { env: { ...process.env, [envVar]: databaseUrl } },
-      );
-    }
 
     async function appliedMigrations(): Promise<number> {
       const client = new Client({
@@ -74,17 +73,17 @@ describe.each(services)(
       delete process.env[envVar];
     });
 
-    it('migrate deploy registra a migration inicial em <schema>._prisma_migrations', async () => {
-      await migrateDeploy();
+    it('migrate deploy registra as migrations em <schema>._prisma_migrations', async () => {
+      await migrateDeploy(name, databaseUrl);
 
-      expect(await appliedMigrations()).toBe(1);
+      expect(await appliedMigrations()).toBe(migrations);
     });
 
-    it('um segundo migrate deploy não tem nada pendente nem duplica a migration', async () => {
-      const { stdout } = await migrateDeploy();
+    it('um segundo migrate deploy não tem nada pendente nem duplica migrations', async () => {
+      const { stdout } = await migrateDeploy(name, databaseUrl);
 
       expect(stdout).toContain('No pending migrations to apply');
-      expect(await appliedMigrations()).toBe(1);
+      expect(await appliedMigrations()).toBe(migrations);
     });
 
     it('com o banco no ar, /health/ready responde 200', async () => {
