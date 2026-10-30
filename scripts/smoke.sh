@@ -6,6 +6,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# O Compose exige JWT_SECRET. Sem .env nem variável, o smoke usa um aleatório.
+if [ -z "${JWT_SECRET:-}" ] && ! grep -qs '^JWT_SECRET=.' .env; then
+  export JWT_SECRET="smoke-$(node -e 'console.log(require("node:crypto").randomBytes(24).toString("hex"))')"
+fi
+
 SERVICES=(catalog orders integration erp-mock)
 
 fail() { echo "FALHOU: $*" >&2; exit 1; }
