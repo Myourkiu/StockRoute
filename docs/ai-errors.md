@@ -57,3 +57,11 @@ Erros cometidos pela IA durante o desenvolvimento e pegos antes de chegar à `ma
 - **Como foi pego:** o PR de verificação do CodeRabbit (#7), olhando em qual passo do CI ele falhou.
 - **Correção:** script `typecheck` (`tsc --noEmit`) e passo `Typecheck` no CI, depois de `Format` e antes de `Unit tests`. O `tsconfig.json` raiz passou a incluir apps, libs e testes (antes só tinha referências, uma delas para um app do scaffold que já não existia). O typecheck pega o contrato quebrado nos 6 pontos e o `import type` faltando (TS1272).
 - **Lição:** saber o que cada passo do pipeline de fato garante; teste verde não significa tipos corretos.
+
+## 2026-10-30 — Import padrão de um pacote ESM-only (Etapa 2, fatia 1)
+
+- **Suposição:** o script `scripts/issue-token.mjs` poderia fazer `import jwt from '@nestjs/jwt'` e usar `jwt.JwtService`, como se o pacote fosse CommonJS (onde o import padrão devolve o `module.exports`).
+- **O que aconteceu:** o `@nestjs/jwt` 12 é ESM-only, como o resto do Nest 12, e não tem export padrão. O script quebrou com `does not provide an export named 'default'`.
+- **Como foi pego:** o teste do `AuthGuard` que roda o script de verdade e valida o token gerado.
+- **Correção:** `import { JwtService } from '@nestjs/jwt'`.
+- **Lição:** no Nest 12 todos os pacotes `@nestjs/*` são ESM; um teste que executa o script (e não só a função) pega esse tipo de erro de carga.
