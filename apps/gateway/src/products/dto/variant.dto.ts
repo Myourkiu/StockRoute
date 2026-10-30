@@ -1,12 +1,13 @@
 import {
   IsInt,
   IsObject,
-  IsOptional,
   Matches,
+  Max,
   Min,
   ValidateBy,
   type ValidationOptions,
 } from 'class-validator';
+import { IsDefinedOrAbsent, PG_INT_MAX } from '../../common/validation';
 
 // Atributos livres da variante (cor, tamanho, voltagem...), sempre texto.
 function IsStringRecord(options?: ValidationOptions) {
@@ -36,31 +37,36 @@ export class VariantDto {
 
   @IsInt()
   @Min(1)
+  @Max(PG_INT_MAX)
   wholesalePriceCents: number;
 
   @IsInt()
   @Min(1)
+  @Max(PG_INT_MAX)
   minQuantity: number;
 
   @IsInt()
   @Min(0)
+  @Max(PG_INT_MAX)
   initialStock: number;
 }
 
 // O SKU identifica a variante e o estoque não é editável pela API.
 export class UpdateVariantDto {
-  @IsOptional()
+  @IsDefinedOrAbsent()
   @IsObject()
   @IsStringRecord()
   attributes?: Record<string, string>;
 
-  @IsOptional()
+  @IsDefinedOrAbsent()
   @IsInt()
   @Min(1)
+  @Max(PG_INT_MAX)
   wholesalePriceCents?: number;
 
-  @IsOptional()
+  @IsDefinedOrAbsent()
   @IsInt()
   @Min(1)
+  @Max(PG_INT_MAX)
   minQuantity?: number;
 }
