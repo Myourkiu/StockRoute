@@ -13,6 +13,7 @@ export interface AuthenticatedRequest {
 }
 
 interface TokenClaims {
+  exp?: unknown;
   sub?: unknown;
   role?: unknown;
   supplierId?: unknown;
@@ -39,6 +40,11 @@ export class AuthGuard implements CanActivate {
         algorithms: ['HS256'],
       });
     } catch {
+      throw new UnauthorizedException();
+    }
+    // A biblioteca só checa `exp` quando a claim existe: sem ela, o token
+    // nunca expiraria.
+    if (typeof claims.exp !== 'number') {
       throw new UnauthorizedException();
     }
     request.actor = toActor(claims);
