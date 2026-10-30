@@ -12,7 +12,7 @@ import { RolesGuard } from './roles.guard';
 @Controller()
 class SampleController {
   @Get()
-  @Roles('supplier')
+  @Roles(['supplier'])
   write(this: void) {}
 
   @Get()
