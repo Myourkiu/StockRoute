@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { createValidationPipe } from '../../common/validation';
 import { CreateProductDto } from './create-product.dto';
 import { UpdateProductDto } from './update-product.dto';
+import { UpdateVariantDto } from './variant.dto';
 
 function validProduct() {
   return {
@@ -109,6 +110,24 @@ describe('validação dos DTOs de produto', () => {
     await expect(errorsFor(product, CreateProductDto)).resolves.toEqual([
       'variants.0.attributes',
     ]);
+  });
+
+  it('inteiro acima do limite do Postgres (2^31 - 1) → erro no campo', async () => {
+    const product = validProduct();
+    product.variants[0].initialStock = 3_000_000_000;
+
+    await expect(errorsFor(product, CreateProductDto)).resolves.toEqual([
+      'variants.0.initialStock',
+    ]);
+  });
+
+  it('null em campo opcional da edição → erro, em vez de chegar ao banco', async () => {
+    await expect(
+      errorsFor({ name: null, active: null }, UpdateProductDto),
+    ).resolves.toEqual(['active', 'name']);
+    await expect(
+      errorsFor({ wholesalePriceCents: null }, UpdateVariantDto),
+    ).resolves.toEqual(['wholesalePriceCents']);
   });
 
   it('edição parcial aceita só active e rejeita estoque', async () => {

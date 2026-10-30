@@ -172,6 +172,16 @@ describe('ProductsService', () => {
       await expect(
         service.deactivate(supplierA, { id: PRODUCT_ID }),
       ).resolves.toBeUndefined();
+      expect(repository.setActive).not.toHaveBeenCalled();
+    });
+
+    it('desativar produto ativo do dono chama setActive(false)', async () => {
+      repository.findById.mockResolvedValue(record());
+
+      await expect(
+        service.deactivate(supplierA, { id: PRODUCT_ID }),
+      ).resolves.toBeUndefined();
+      expect(repository.setActive).toHaveBeenCalledWith(PRODUCT_ID, false);
     });
 
     it('editar com active: true reativa o produto inativo do dono', async () => {

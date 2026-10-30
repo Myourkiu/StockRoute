@@ -23,7 +23,10 @@ function contextWith(authorization?: string) {
 // AuthGuard (T05): só deixa passar token HS256 assinado com o segredo do
 // gateway, dentro da validade e com claims coerentes, e anexa o ator.
 describe('AuthGuard', () => {
-  const jwt = new JwtService({ secret: SECRET });
+  const jwt = new JwtService({
+    secret: SECRET,
+    signOptions: { expiresIn: '1h' },
+  });
   const guard = new AuthGuard(jwt);
 
   async function check(authorization?: string) {
@@ -76,13 +79,35 @@ describe('AuthGuard', () => {
   });
 
   it('token expirado → 401', async () => {
-    const expired = jwt.sign({
+    const expired = new JwtService({ secret: SECRET }).sign({
       sub: 'x',
       role: 'retailer',
       exp: Math.floor(Date.now() / 1000) - 10,
     });
 
     await expect(check(`Bearer ${expired}`)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('token assinado com outro algoritmo (HS512) e o segredo certo → 401', async () => {
+    const token = jwt.sign(
+      { sub: 'x', role: 'retailer' },
+      { algorithm: 'HS512' },
+    );
+
+    await expect(check(`Bearer ${token}`)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('token sem a claim exp (nunca expiraria) → 401', async () => {
+    const token = new JwtService({ secret: SECRET }).sign({
+      sub: 'x',
+      role: 'retailer',
+    });
+
+    await expect(check(`Bearer ${token}`)).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
   });

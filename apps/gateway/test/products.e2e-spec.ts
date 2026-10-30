@@ -21,7 +21,10 @@ const SECRET = 'e2e-secret';
 // CRUD de produtos de ponta a ponta (T07): gateway real (HTTP) → catalog real
 // (TCP) → Postgres real, com tokens assinados como o `npm run token` faz.
 describe('/products (e2e)', () => {
-  const jwt = new JwtService({ secret: SECRET });
+  const jwt = new JwtService({
+    secret: SECRET,
+    signOptions: { expiresIn: '1h' },
+  });
   const alfa = `Bearer ${jwt.sign({ sub: SUPPLIER_ALFA, role: 'supplier', supplierId: SUPPLIER_ALFA })}`;
   const beta = `Bearer ${jwt.sign({ sub: SUPPLIER_BETA, role: 'supplier', supplierId: SUPPLIER_BETA })}`;
   const retailer = `Bearer ${jwt.sign({ sub: 'lojista-1', role: 'retailer' })}`;
