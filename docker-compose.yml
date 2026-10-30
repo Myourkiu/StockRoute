@@ -167,8 +167,9 @@ services:
       INTEGRATION_TCP_HOST: integration
       INTEGRATION_TCP_PORT: 18103
       ERP_MOCK_URL: http://erp-mock:18204
-      # Padrão só de desenvolvimento, como as senhas acima; um .env sobrescreve.
-      JWT_SECRET: ${JWT_SECRET:-dev-only-jwt-secret-change-me}
+      # Obrigatório e sem padrão: com um valor conhecido, qualquer um que alcance
+      # a porta 18000 assinaria tokens válidos. Vem do .env (ver .env.example).
+      JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET no .env (ver .env.example)}
     ports:
       - '18000:18000'
     # Só ordem de subida: o readiness do gateway não depende dos serviços internos.
