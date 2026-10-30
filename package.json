@@ -12,6 +12,7 @@
     "format:check": "prettier --check \"apps/**/*.ts\" \"libs/**/*.ts\" \"*.ts\"",
     "start:dev": "nest start --watch",
     "lint": "oxlint --type-aware --deny-warnings apps/ libs/",
+    "token": "node --env-file-if-exists=.env scripts/issue-token.mjs",
     "typecheck": "tsc --noEmit --allowImportingTsExtensions",
     "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "test:watch": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --watch",
