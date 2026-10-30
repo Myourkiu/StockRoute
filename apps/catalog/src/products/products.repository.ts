@@ -89,7 +89,7 @@ export class ProductsRepository {
   async update(id: string, changes: ProductChanges): Promise<ProductRecord> {
     const row = await this.prisma.product.update({
       where: { id },
-      data: changes,
+      data: pickProductChanges(changes),
       include: withVariants,
     });
     return toRecord(row);
@@ -117,7 +117,7 @@ export class ProductsRepository {
   ): Promise<ProductRecord | null> {
     const { count } = await this.prisma.variant.updateMany({
       where: { productId, sku },
-      data: changes,
+      data: pickVariantChanges(changes),
     });
     return count === 0 ? null : this.findById(productId);
   }
@@ -139,6 +139,27 @@ export class ProductsRepository {
       throw error;
     }
   }
+}
+
+// Só os campos editáveis chegam ao Prisma, mesmo que um chamador interno mande
+// outros (`supplierId`, `sku`). O gateway já barra isso na API pública; aqui é
+// defesa em profundidade.
+function pickProductChanges({
+  name,
+  description,
+  category,
+  tags,
+  active,
+}: ProductChanges): ProductChanges {
+  return { name, description, category, tags, active };
+}
+
+function pickVariantChanges({
+  attributes,
+  wholesalePriceCents,
+  minQuantity,
+}: VariantChanges): VariantChanges {
+  return { attributes, wholesalePriceCents, minQuantity };
 }
 
 function toVariantCreate({ initialStock, ...variant }: NewVariant) {
