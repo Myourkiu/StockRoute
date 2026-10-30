@@ -47,22 +47,33 @@ function record(overrides: Partial<ProductRecord> = {}): ProductRecord {
   };
 }
 
+type Repository = ProductsRepository;
+
+// Funções soltas (e não métodos), para o lint não acusar método sem `this`.
+function mockMethod<K extends keyof Repository>() {
+  return jest.fn<ReturnType<Repository[K]>, Parameters<Repository[K]>>();
+}
+
+function mockRepository() {
+  return {
+    create: mockMethod<'create'>(),
+    findById: mockMethod<'findById'>(),
+    update: mockMethod<'update'>(),
+    addVariant: mockMethod<'addVariant'>(),
+    updateVariant: mockMethod<'updateVariant'>(),
+    setActive: mockMethod<'setActive'>(),
+  };
+}
+
 // Regras do catálogo (T03) com o repositório mockado: posse, visibilidade de
 // produto inativo e desativação idempotente.
 describe('ProductsService', () => {
-  let repository: jest.Mocked<ProductsRepository>;
+  let repository: ReturnType<typeof mockRepository>;
   let service: ProductsService;
 
   beforeEach(() => {
-    repository = {
-      create: jest.fn(),
-      findById: jest.fn(),
-      update: jest.fn(),
-      addVariant: jest.fn(),
-      updateVariant: jest.fn(),
-      setActive: jest.fn(),
-    } as unknown as jest.Mocked<ProductsRepository>;
-    service = new ProductsService(repository);
+    repository = mockRepository();
+    service = new ProductsService(repository as unknown as ProductsRepository);
   });
 
   describe('create', () => {
