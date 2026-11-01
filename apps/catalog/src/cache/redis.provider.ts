@@ -11,26 +11,27 @@ import type { ProductCacheOptions } from './product-cache';
 export const REDIS = Symbol('REDIS');
 export const PRODUCT_CACHE_OPTIONS = Symbol('PRODUCT_CACHE_OPTIONS');
 
-// Porta padrão dentro da faixa do projeto (18000–18299 + Redis = 18379), e não
-// a 6379, que outro projeto da máquina usa. Sem Redis nela, o cache só falha
-// rápido e tudo segue pelo banco.
-const DEFAULT_REDIS_URL = 'redis://127.0.0.1:18379';
-
-// Falha rápida: sem fila offline e sem retentativa por comando, um Redis fora
-// do ar responde erro na hora em vez de segurar a requisição. A reconexão em
-// segundo plano continua (retryStrategy padrão).
+// Sem `CATALOG_REDIS_URL` o cache fica desligado (`null`): toda leitura vai ao
+// banco. É o caso dos testes que não precisam de Redis. Com a URL, a conexão
+// abre na subida, e um Redis fora do ar só faz o cache falhar rápido.
+//
+// Falha rápida: sem fila offline e sem retentativa por comando, o comando
+// responde erro na hora em vez de segurar a requisição. A reconexão em segundo
+// plano continua (retryStrategy padrão).
 export const redisProvider: Provider = {
   provide: REDIS,
-  useFactory: () => {
+  useFactory: (): Redis | null => {
     const logger = new Logger('Redis');
-    const redis = new Redis(
-      process.env.CATALOG_REDIS_URL ?? DEFAULT_REDIS_URL,
-      {
-        enableOfflineQueue: false,
-        maxRetriesPerRequest: 0,
-        commandTimeout: 200,
-      },
-    );
+    const url = process.env.CATALOG_REDIS_URL;
+    if (!url) {
+      logger.warn('CATALOG_REDIS_URL not set: product cache disabled');
+      return null;
+    }
+    const redis = new Redis(url, {
+      enableOfflineQueue: false,
+      maxRetriesPerRequest: 0,
+      commandTimeout: 200,
+    });
     let lastError = '';
     redis.on('error', (error: Error) => {
       // A cada tentativa de reconexão o mesmo erro se repete; loga só a mudança.
@@ -61,9 +62,9 @@ export const productCacheOptionsProvider: Provider = {
 // Fecha a conexão no shutdown, para o processo (e os testes) terminarem limpos.
 @Injectable()
 export class RedisShutdown implements OnApplicationShutdown {
-  constructor(@Inject(REDIS) private readonly redis: Redis) {}
+  constructor(@Inject(REDIS) private readonly redis: Redis | null) {}
 
   onApplicationShutdown() {
-    this.redis.disconnect();
+    this.redis?.disconnect();
   }
 }
