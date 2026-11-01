@@ -69,8 +69,7 @@ Erros cometidos pela IA durante o desenvolvimento e pegos antes de chegar à `ma
 ## 2026-10-30 — Arquivos gravados com CRLF por script (Etapa 2, fatia 1)
 
 - **Suposição:** editar arquivos com um script Python (`open(..., 'w')`) preservaria o fim de linha do repositório.
-- **O que aconteceu:** no Windows, o modo texto do Python grava `
-`. O `package.json` e o `.env.example` ficaram com CRLF na cópia de trabalho.
+- **O que aconteceu:** no Windows, o modo texto do Python grava o fim de linha como `\r\n` (CRLF). O `package.json` e o `.env.example` ficaram com CRLF na cópia de trabalho.
 - **Como foi pego:** aviso do git no commit (`CRLF will be replaced by LF`). O `.gitattributes` normalizou o conteúdo commitado, então nada chegou à `main` com CRLF.
 - **Correção:** scripts de edição passaram a usar `newline=''`, e os arquivos de código passam pelo Prettier depois.
 - **Lição:** ferramenta de edição também muda o arquivo além do conteúdo; conferir o diff (e os avisos do git) e não só o texto.
