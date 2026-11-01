@@ -113,6 +113,51 @@ describe('ProductCache', () => {
     await expect(cache().get(ID)).resolves.toEqual({ kind: 'miss' });
   });
 
+  it('JSON malformado no cache → miss, sem exceção', async () => {
+    redis.get.mockResolvedValue('{quebrado');
+
+    await expect(cache().get(ID)).resolves.toEqual({ kind: 'miss' });
+  });
+
+  it.each([
+    ['null', 'null'],
+    ['objeto vazio', '{}'],
+    ['produto de outro id', JSON.stringify({ ...product, id: 'outro' })],
+  ])(
+    'valor fora do formato (%s) → miss, e não um hit inválido',
+    async (_label, value) => {
+      redis.get.mockResolvedValue(value);
+
+      await expect(cache().get(ID)).resolves.toEqual({ kind: 'miss' });
+    },
+  );
+
+  it('DEL que falhou deixa a chave pendente: o get não serve o valor velho e tenta apagar de novo', async () => {
+    const instance = cache();
+    redis.del.mockRejectedValueOnce(new Error('Command timed out'));
+    redis.get.mockResolvedValue(JSON.stringify(product));
+
+    await instance.invalidate(ID);
+    const read = await instance.get(ID);
+
+    expect(read).toEqual({ kind: 'miss' });
+    expect(redis.del).toHaveBeenCalledTimes(2);
+  });
+
+  it('quando o DEL pendente enfim funciona, a chave volta a ser lida do cache', async () => {
+    const instance = cache();
+    redis.del
+      .mockRejectedValueOnce(new Error('Command timed out'))
+      .mockRejectedValueOnce(new Error('Command timed out'))
+      .mockResolvedValue(1);
+    redis.get.mockResolvedValue(JSON.stringify(product));
+
+    await instance.invalidate(ID);
+    await expect(instance.get(ID)).resolves.toEqual({ kind: 'miss' });
+    await expect(instance.get(ID)).resolves.toEqual({ kind: 'miss' });
+    await expect(instance.get(ID)).resolves.toEqual({ kind: 'hit', product });
+  });
+
   it('erro do Redis no set ou no invalidate é engolido', async () => {
     redis.set.mockRejectedValue(new Error('Connection is closed.'));
     redis.del.mockRejectedValue(new Error('Connection is closed.'));

@@ -424,11 +424,11 @@ describe('ProductsService', () => {
     });
 
     it.each([
-      ['NotFound', null, undefined],
-      ['Conflict', record(), new SkuConflictError()],
+      ['NotFound', null, undefined, ProductNotFoundError],
+      ['Conflict', record(), new SkuConflictError(), SkuConflictError],
     ])(
       'escrita que falha (%s) → não invalida',
-      async (_label, found, error) => {
+      async (_label, found, error, expectedError) => {
         repository.findById.mockResolvedValue(found);
         if (error) {
           repository.addVariant.mockRejectedValue(error);
@@ -436,7 +436,7 @@ describe('ProductsService', () => {
 
         await expect(
           service.addVariant(supplierA, { id: PRODUCT_ID, variant }),
-        ).rejects.toBeDefined();
+        ).rejects.toBeInstanceOf(expectedError);
         expect(cache.invalidate).not.toHaveBeenCalled();
       },
     );
