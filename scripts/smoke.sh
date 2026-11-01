@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Smoke do sistema em containers: sobe os 5 serviços, confere a saúde agregada,
-# o CRUD de produtos pelo gateway, a falha de um serviço, o que a imagem de execução leva, as portas publicadas e
+# o CRUD de produtos pelo gateway, o cache do produto, a falha de um serviço, o que a imagem de execução leva, as portas publicadas e
 # um segundo `up` sem apagar dados.
 # Uso: scripts/smoke.sh (precisa do Docker; termina com `down`, sem -v).
 set -euo pipefail
@@ -58,6 +58,18 @@ body=$(cat /tmp/smoke-product.json)
 id=$(json_field "$body" id)
 code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: $retailer" "localhost:18000/products/$id")
 [ "$code" = 200 ] || fail "GET do produto como lojista respondeu $code"
+
+echo "== cache do produto"
+curl -s -o /dev/null -H "Authorization: $retailer" "localhost:18000/products/$id"
+ttl=$(docker compose exec -T redis redis-cli TTL "catalog:product:v1:$id" | tr -d '')
+[ "$ttl" -ge 239 ] && [ "$ttl" -le 360 ] || fail "TTL da chave do produto: $ttl (esperado 240-360)"
+ok "produto em cache com TTL de ${ttl}s"
+docker compose stop redis
+code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: $retailer" "localhost:18000/products/$id")
+[ "$code" = 200 ] || fail "com o Redis parado, GET do produto respondeu $code"
+docker compose start redis
+ok "com o Redis parado, o GET segue pelo banco (200)"
+
 code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE -H "Authorization: $supplier" "localhost:18000/products/$id")
 [ "$code" = 204 ] || fail "DELETE respondeu $code"
 code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: $retailer" "localhost:18000/products/$id")
