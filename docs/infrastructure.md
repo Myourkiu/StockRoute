@@ -76,7 +76,7 @@ O Compose exige `JWT_SECRET` (copie o `.env.example` para `.env`); as senhas do 
 
 ## Portas
 
-Faixa reservada do projeto: **18000–18299**, escolhida para não colidir com outros projetos da máquina nem com a faixa dinâmica do Windows (≥ 49152, usada pelo Testcontainers).
+Faixa reservada do projeto: **18000–18299**, escolhida para não colidir com outros projetos da máquina nem com a faixa dinâmica do Windows (≥ 49152, usada pelo Testcontainers). A única porta fora da faixa é a do Postgres no host, `18432`, presa a 127.0.0.1.
 
 | Porta | Serviço | Publicada no host? |
 |---|---|---|
