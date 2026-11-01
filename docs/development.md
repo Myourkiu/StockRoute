@@ -4,7 +4,7 @@ Como o código é testado, revisado e entregue.
 
 ## Requisitos
 
-- Node ≥ 24.15 (`.nvmrc`; o `engine-strict` do `.npmrc` faz o `npm ci` falhar em versão menor). O Nest 12 é ESM-only, e o Jest só carrega os pacotes dele a partir do Node 24.9.
+- Node 24, a partir da 24.15. O `.nvmrc` escolhe só a linha 24; o mínimo vem do `engines` do `package.json`, e o `engine-strict` do `.npmrc` faz o `npm ci` falhar numa 24 anterior à 24.15. O Nest 12 é ESM-only, e o Jest só carrega os pacotes dele a partir do Node 24.9.
 - Docker, para os testes de integração e o Compose.
 
 ## Testes
