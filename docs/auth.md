@@ -6,7 +6,7 @@ Não há cadastro nem login nesta fase do projeto. A identidade é um JWT assina
 
 - **Algoritmo:** HS256, com o segredo em `JWT_SECRET`. Token assinado com outro algoritmo é recusado, mesmo com o segredo certo.
 - **Claims:**
-  - `sub`: quem é;
+  - `sub`: quem é. Hoje é só informativo: o guard não o valida nem o usa, e a posse vem do `supplierId`;
   - `role`: `supplier` (fornecedor) ou `retailer` (lojista);
   - `supplierId`: UUID do fornecedor, obrigatório quando o papel é `supplier`;
   - `exp`: expiração, **obrigatória**. A biblioteca de JWT só confere `exp` quando a claim existe, então o guard recusa token sem ela; senão o token nunca expiraria.
