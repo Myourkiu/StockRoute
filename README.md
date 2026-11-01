@@ -90,6 +90,10 @@ O `GET /products/:id` passa por um cache no Redis (cache-aside); detalhes em [`d
 
 Valores em centavos inteiros (`wholesalePriceCents`). O estoque não é editável pela API. Sem token ou com token inválido a resposta é 401; papel errado, 403. Editar ou desativar produto de outro fornecedor responde 404, igual a um inexistente, e o mesmo vale para ler um produto inativo de outro fornecedor. Produto ativo é visível para qualquer token.
 
+## Documentação
+
+A documentação técnica está em [`docs/INDEX.md`](docs/INDEX.md): arquitetura, API, autenticação, catálogo, infraestrutura, variáveis de ambiente e desenvolvimento. Agentes de IA começam pelo [`CLAUDE.md`](CLAUDE.md).
+
 ## Fluxo de contribuição
 
 Toda mudança entra por PR. O CI (lint, formatação, typecheck, testes unitários, e2e e build) precisa passar, e o CodeRabbit revisa em PT-BR. Erros da IA pegos no caminho ficam em [`docs/ai-errors.md`](docs/ai-errors.md).
