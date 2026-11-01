@@ -53,7 +53,7 @@ Cada linha veio de um erro real. O relato completo está em [docs/ai-errors.md](
 | Armadilha | Como evitar |
 |---|---|
 | Achar que teste verde significa tipos corretos | O ts-jest só transpila (`isolatedModules`). Rode `npm run typecheck` antes de abrir PR; o CI também roda. |
-| Importar interface como valor num parâmetro decorado | Use `import type`. Com `emitDecoratorMetadata`, o import de valor quebra o build. |
+| Importar como valor a interface que tipa parâmetro ou retorno de método decorado | Use `import type`. Com `emitDecoratorMetadata`, o TypeScript emite esses tipos como referência em tempo de execução, e o build quebra. |
 | `import x from '@nestjs/...'` (import padrão) | Os pacotes do Nest 12 são ESM-only, sem export padrão: use import nomeado. |
 | Supor o formato do erro do client TCP do Nest | O client rejeita com o objeto que o servidor mandou, ou com string no erro de handler inexistente. Confira em teste antes de assertar. |
 | Fake timers do Jest para timeout de biblioteca | Confira como a biblioteca mede o tempo. O terminus usa `AbortSignal.timeout`, que o Jest não controla. |

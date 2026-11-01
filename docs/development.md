@@ -82,4 +82,4 @@ Os arquivos que pedem revisão humana obrigatória (**gate humano**) são destac
 - **Comentários** explicam o porquê (a decisão e a alternativa descartada), em português. O que o código já diz não é comentado.
 - **Configuração** vem do ambiente e é validada na subida quando um valor inválido quebraria em silêncio depois.
 - **Dependência opcional** (cache) falha rápido e degrada; nunca é condição de subida nem de readiness.
-- **Pacotes `@nestjs/*`** são ESM-only: import nomeado, nunca import padrão. Interface usada como tipo de parâmetro decorado é importada com `import type`.
+- **Pacotes `@nestjs/*`** são ESM-only: import nomeado, nunca import padrão. Interface que tipa parâmetro ou retorno de método decorado é importada com `import type`.
