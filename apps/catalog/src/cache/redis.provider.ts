@@ -47,17 +47,36 @@ export const redisProvider: Provider = {
   },
 };
 
-export const productCacheOptionsProvider: Provider = {
-  provide: PRODUCT_CACHE_OPTIONS,
-  useFactory: (): ProductCacheOptions => ({
-    ttlSeconds: Number(process.env.CATALOG_CACHE_TTL_SECONDS ?? 300),
+export function createProductCacheOptions(): ProductCacheOptions {
+  return {
+    ttlSeconds: positiveIntFromEnv('CATALOG_CACHE_TTL_SECONDS', 300),
     jitterRatio: 0.2,
-    notFoundTtlSeconds: Number(
-      process.env.CATALOG_CACHE_NOT_FOUND_TTL_SECONDS ?? 30,
+    notFoundTtlSeconds: positiveIntFromEnv(
+      'CATALOG_CACHE_NOT_FOUND_TTL_SECONDS',
+      30,
     ),
     random: Math.random,
-  }),
+  };
+}
+
+export const productCacheOptionsProvider: Provider = {
+  provide: PRODUCT_CACHE_OPTIONS,
+  useFactory: createProductCacheOptions,
 };
+
+// O `SET ... EX` só aceita inteiro positivo. Um valor inválido falha na subida,
+// em vez de fazer toda escrita no cache falhar em silêncio depois.
+function positiveIntFromEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') {
+    return fallback;
+  }
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${name} must be a positive integer, got "${raw}"`);
+  }
+  return value;
+}
 
 // Fecha a conexão no shutdown, para o processo (e os testes) terminarem limpos.
 @Injectable()
