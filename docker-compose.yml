@@ -125,13 +125,11 @@ services:
       CATALOG_HTTP_PORT: 18201
       HEALTH_PORT: 18201
       CATALOG_REDIS_URL: redis://redis:6379
-    # O Redis entra só como ordem de subida: o readiness do catalog depende só
-    # do banco, e um Redis fora do ar só desliga o cache na prática.
+    # Sem depends_on no Redis: o catalog sobe e responde mesmo sem ele (o cache
+    # só falha rápido e tudo vai ao banco), e conecta quando o Redis subir.
     depends_on:
       catalog-migrate:
         condition: service_completed_successfully
-      redis:
-        condition: service_healthy
     healthcheck: *ready-healthcheck
 
   orders:
