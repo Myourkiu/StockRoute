@@ -66,6 +66,15 @@ Erros cometidos pela IA durante o desenvolvimento e pegos antes de chegar à `ma
 - **Correção:** `import { JwtService } from '@nestjs/jwt'`.
 - **Lição:** no Nest 12 todos os pacotes `@nestjs/*` são ESM; um teste que executa o script (e não só a função) pega esse tipo de erro de carga.
 
+## 2026-10-30 — Arquivos gravados com CRLF por script (Etapa 2, fatia 1)
+
+- **Suposição:** editar arquivos com um script Python (`open(..., 'w')`) preservaria o fim de linha do repositório.
+- **O que aconteceu:** no Windows, o modo texto do Python grava `
+`. O `package.json` e o `.env.example` ficaram com CRLF na cópia de trabalho.
+- **Como foi pego:** aviso do git no commit (`CRLF will be replaced by LF`). O `.gitattributes` normalizou o conteúdo commitado, então nada chegou à `main` com CRLF.
+- **Correção:** scripts de edição passaram a usar `newline=''`, e os arquivos de código passam pelo Prettier depois.
+- **Lição:** ferramenta de edição também muda o arquivo além do conteúdo; conferir o diff (e os avisos do git) e não só o texto.
+
 ## 2026-10-30 — Validações que "pulam" casos (PR #9, CodeRabbit)
 
 - **Suposição:** `@IsOptional()` nos DTOs de edição e `verifyAsync` com `algorithms: ['HS256']` no `AuthGuard` bastariam para barrar entrada inválida e token sem validade.
