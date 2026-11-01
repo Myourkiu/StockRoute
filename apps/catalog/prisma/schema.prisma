@@ -1,5 +1,6 @@
-// Schema do catalog. O domínio (produtos, variações, estoque) chega na Etapa 2;
-// por ora só existe a migration inicial, que marca o ponto zero do histórico.
+// Schema do catalog: fornecedores, produtos, variações (SKUs) e estoque.
+// Dinheiro em centavos inteiros (Int), sem float nem Decimal. As tabelas ficam
+// no schema `catalog`, escolhido pela URL de conexão (`?schema=catalog`).
 generator client {
   provider     = "prisma-client"
   output       = "../src/generated/prisma"
@@ -10,4 +11,61 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// Criados por seed (migration de dados). O pedido mínimo só é usado na Etapa 3.
+model Supplier {
+  id                 String    @id @db.Uuid
+  name               String
+  minOrderValueCents Int       @map("min_order_value_cents")
+  products           Product[]
+
+  @@map("suppliers")
+}
+
+// "Remover" é desativar: o produto continua no banco porque pedidos vão
+// apontar para os SKUs dele.
+model Product {
+  id          String    @id @default(uuid()) @db.Uuid
+  supplierId  String    @map("supplier_id") @db.Uuid
+  supplier    Supplier  @relation(fields: [supplierId], references: [id])
+  name        String
+  description String
+  category    String
+  tags        String[]
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  variants    Variant[]
+
+  @@index([supplierId])
+  @@map("products")
+}
+
+model Variant {
+  id                  String   @id @default(uuid()) @db.Uuid
+  productId           String   @map("product_id") @db.Uuid
+  product             Product  @relation(fields: [productId], references: [id])
+  // Único entre todos os produtos: pedidos e estoque referenciam o SKU.
+  sku                 String   @unique
+  attributes          Json
+  wholesalePriceCents Int      @map("wholesale_price_cents")
+  minQuantity         Int      @map("min_quantity")
+  stock               Stock?
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@index([productId])
+  @@map("variants")
+}
+
+// Só leitura nesta etapa. A versão é para o lock otimista da Etapa 3.
+model Stock {
+  sku       String   @id
+  variant   Variant  @relation(fields: [sku], references: [sku])
+  available Int
+  version   Int      @default(0)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("stock")
 }

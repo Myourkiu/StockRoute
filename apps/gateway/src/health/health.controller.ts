@@ -5,7 +5,7 @@ import {
   CATALOG_CLIENT,
   INTEGRATION_CLIENT,
   ORDERS_CLIENT,
-} from './health.constants';
+} from '../clients/clients.constants';
 import { HttpHealthIndicator } from './http-health.indicator';
 import { ServiceHealthIndicator } from './service-health.indicator';
 

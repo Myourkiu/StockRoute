@@ -46,6 +46,8 @@ describe('GET /health (e2e)', () => {
     await erpMock.listen(0, '127.0.0.1');
     process.env.ERP_MOCK_URL = await erpMock.getUrl();
 
+    // O gateway não sobe sem o segredo do JWT, mesmo que /health não o use.
+    process.env.JWT_SECRET = 'e2e-secret';
     const gatewayRef = await Test.createTestingModule({
       imports: [GatewayModule],
     }).compile();
@@ -62,6 +64,7 @@ describe('GET /health (e2e)', () => {
       delete process.env[`${prefix}_TCP_PORT`];
     }
     delete process.env.ERP_MOCK_URL;
+    delete process.env.JWT_SECRET;
   });
 
   it('responde 200 com os quatro serviços up', async () => {

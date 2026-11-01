@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 # Smoke do sistema em containers: sobe os 5 serviços, confere a saúde agregada,
-# a falha de um serviço, o que a imagem de execução leva, as portas publicadas e
+# o CRUD de produtos pelo gateway, a falha de um serviço, o que a imagem de execução leva, as portas publicadas e
 # um segundo `up` sem apagar dados.
 # Uso: scripts/smoke.sh (precisa do Docker; termina com `down`, sem -v).
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+# O Compose exige JWT_SECRET. Sem .env nem variável, o smoke usa um aleatório.
+if [ -z "${JWT_SECRET:-}" ] && ! grep -qs '^JWT_SECRET=.' .env; then
+  export JWT_SECRET="smoke-$(node -e 'console.log(require("node:crypto").randomBytes(24).toString("hex"))')"
+fi
 
 SERVICES=(catalog orders integration erp-mock)
 
@@ -14,6 +19,16 @@ ok() { echo "ok: $*"; }
 # Status de um serviço na resposta do /health, ex.: service_status "$body" orders
 service_status() {
   node -e 'const b = JSON.parse(process.argv[1]); console.log(b.details?.[process.argv[2]]?.status ?? "ausente")' "$1" "$2"
+}
+
+# Campo de um JSON, ex.: json_field "$body" id
+json_field() {
+  node -e 'console.log(JSON.parse(process.argv[1])[process.argv[2]] ?? "")' "$1" "$2"
+}
+
+# Token de desenvolvimento assinado com o mesmo segredo que o gateway está usando.
+token() {
+  JWT_SECRET="$(docker compose exec -T gateway printenv JWT_SECRET)" node scripts/issue-token.mjs "$@"
 }
 
 echo "== subindo o sistema"
@@ -32,6 +47,24 @@ for service in "${SERVICES[@]}"; do
   [ "$(service_status "$body" "$service")" = up ] || fail "$service não está up: $body"
 done
 ok "GET /health 200 com os 4 serviços up"
+
+echo "== CRUD de produtos"
+supplier="Bearer $(token supplier 11111111-1111-4111-8111-111111111111)"
+retailer="Bearer $(token retailer)"
+sku="SMOKE-$(date +%s)"
+code=$(curl -s -o /tmp/smoke-product.json -w '%{http_code}' -X POST localhost:18000/products   -H "Authorization: $supplier" -H 'Content-Type: application/json'   -d "{\"name\":\"Smoke\",\"description\":\"\",\"category\":\"smoke\",\"tags\":[],\"variants\":[{\"sku\":\"$sku\",\"attributes\":{},\"wholesalePriceCents\":100,\"minQuantity\":1,\"initialStock\":1}]}")
+body=$(cat /tmp/smoke-product.json)
+[ "$code" = 201 ] || fail "POST /products respondeu $code: $body"
+id=$(json_field "$body" id)
+code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: $retailer" "localhost:18000/products/$id")
+[ "$code" = 200 ] || fail "GET do produto como lojista respondeu $code"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE -H "Authorization: $supplier" "localhost:18000/products/$id")
+[ "$code" = 204 ] || fail "DELETE respondeu $code"
+code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: $retailer" "localhost:18000/products/$id")
+[ "$code" = 404 ] || fail "GET do produto desativado respondeu $code"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:18000/products)
+[ "$code" = 401 ] || fail "POST sem token respondeu $code"
+ok "criar 201, ler 200, desativar 204, ler 404, sem token 401"
 
 echo "== orders parado"
 docker compose stop orders
