@@ -38,7 +38,7 @@ O gateway valida todo corpo antes de chamar qualquer serviço:
 - **Campo desconhecido é erro.** O dono do produto vem do token, e um `supplierId` no corpo responde 400.
 - **Sem conversão implícita.** `"10"` não vira `10`: preço em texto é erro.
 - **Campo opcional que vem precisa ser válido.** Na edição, mandar `null` é erro; omitir o campo é o jeito de não mudar.
-- **Limites:** nome com até 200 caracteres, categoria com até 100, até 20 tags de até 50, e de 1 a 50 variantes por criação. SKU com letras, números, `.`, `_` e `-`, até 64 caracteres. Preço e quantidade mínima ≥ 1, estoque inicial ≥ 0, todos inteiros até 2³¹−1.
+- **Limites:** nome com até 200 caracteres, descrição com até 5000, categoria com até 100, até 20 tags de até 50, e de 1 a 50 variantes por criação. SKU com letras, números, `.`, `_` e `-`, até 64 caracteres. Preço e quantidade mínima ≥ 1, estoque inicial ≥ 0, todos inteiros até 2³¹−1.
 - **Dinheiro em centavos inteiros** (`wholesalePriceCents: 1990` = R$ 19,90).
 - **Atributos da variante** são um objeto de textos (`{ "cor": "azul" }`).
 
