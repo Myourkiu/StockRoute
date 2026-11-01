@@ -1,6 +1,6 @@
 # Arquitetura
 
-O StockRoute é um marketplace B2B: fornecedores publicam catálogos, lojistas buscam produtos e fazem pedidos, e um ERP externo é a fonte da verdade do estoque. O sistema é um monorepo NestJS com cinco aplicações independentes, cada uma com a própria imagem Docker.
+O StockRoute é um marketplace B2B: fornecedores publicam catálogos, lojistas buscam produtos e fazem pedidos, e um ERP externo vai ser a fonte da verdade do estoque (Etapa 4; até lá, o estoque é o valor inicial que o catalog grava no próprio banco). O sistema é um monorepo NestJS com cinco aplicações independentes, cada uma com a própria imagem Docker.
 
 ## Serviços
 
