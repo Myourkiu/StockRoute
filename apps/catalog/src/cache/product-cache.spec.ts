@@ -121,4 +121,17 @@ describe('ProductCache', () => {
     await expect(cache().setNotFound(ID)).resolves.toBeUndefined();
     await expect(cache().invalidate(ID)).resolves.toBeUndefined();
   });
+
+  it('sem Redis configurado (cache desligado) → get é miss e as escritas não fazem nada', async () => {
+    const disabled = new ProductCache(null, {
+      ttlSeconds: 300,
+      jitterRatio: 0.2,
+      notFoundTtlSeconds: 30,
+      random: Math.random,
+    });
+
+    await expect(disabled.get(ID)).resolves.toEqual({ kind: 'miss' });
+    await expect(disabled.setProduct(product)).resolves.toBeUndefined();
+    await expect(disabled.invalidate(ID)).resolves.toBeUndefined();
+  });
 });
