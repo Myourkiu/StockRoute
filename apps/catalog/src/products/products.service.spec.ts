@@ -1,4 +1,5 @@
-import type { Actor, VariantInput } from '@stockroute/contracts';
+import type { Actor, ProductView, VariantInput } from '@stockroute/contracts';
+import type { ProductCache } from '../cache/product-cache';
 import {
   ForbiddenActionError,
   ProductNotFoundError,
@@ -65,15 +66,41 @@ function mockRepository() {
   };
 }
 
+// Por padrão o cache está vazio (miss), e as regras se comportam como sem cache.
+function mockCache() {
+  return {
+    get: jest
+      .fn<ReturnType<ProductCache['get']>, Parameters<ProductCache['get']>>()
+      .mockResolvedValue({ kind: 'miss' }),
+    setProduct: jest.fn<
+      ReturnType<ProductCache['setProduct']>,
+      Parameters<ProductCache['setProduct']>
+    >(),
+    setNotFound: jest.fn<
+      ReturnType<ProductCache['setNotFound']>,
+      Parameters<ProductCache['setNotFound']>
+    >(),
+    invalidate: jest.fn<
+      ReturnType<ProductCache['invalidate']>,
+      Parameters<ProductCache['invalidate']>
+    >(),
+  };
+}
+
 // Regras do catálogo (T03) com o repositório mockado: posse, visibilidade de
 // produto inativo e desativação idempotente.
 describe('ProductsService', () => {
   let repository: ReturnType<typeof mockRepository>;
+  let cache: ReturnType<typeof mockCache>;
   let service: ProductsService;
 
   beforeEach(() => {
     repository = mockRepository();
-    service = new ProductsService(repository as unknown as ProductsRepository);
+    cache = mockCache();
+    service = new ProductsService(
+      repository as unknown as ProductsRepository,
+      cache as unknown as ProductCache,
+    );
   });
 
   describe('create', () => {
@@ -260,5 +287,158 @@ describe('ProductsService', () => {
         service.get(retailer, { id: PRODUCT_ID }),
       ).rejects.toBeInstanceOf(ProductNotFoundError);
     });
+  });
+
+  // Cache-aside da leitura (T09): o cache guarda só a visão pública (produto
+  // ativo) e o "não existe"; as escritas invalidam depois de gravar.
+  describe('cache-aside', () => {
+    const cached: ProductView = {
+      ...record(),
+      createdAt: '2026-10-30T12:00:00.000Z',
+      updatedAt: '2026-10-30T12:00:00.000Z',
+    };
+
+    it('hit → devolve do cache sem chamar o repositório', async () => {
+      cache.get.mockResolvedValue({ kind: 'hit', product: cached });
+
+      await expect(service.get(retailer, { id: PRODUCT_ID })).resolves.toEqual(
+        cached,
+      );
+      expect(repository.findById).not.toHaveBeenCalled();
+    });
+
+    it('miss com produto ativo → busca no repositório e grava no cache', async () => {
+      repository.findById.mockResolvedValue(record());
+
+      const view = await service.get(retailer, { id: PRODUCT_ID });
+
+      expect(cache.setProduct).toHaveBeenCalledWith(view);
+    });
+
+    it.each([
+      ['inexistente', null],
+      ['inativo', record({ active: false })],
+    ])(
+      'miss com produto %s para quem não é dono → grava o "não existe"',
+      async (_label, found) => {
+        repository.findById.mockResolvedValue(found);
+
+        await expect(
+          service.get(retailer, { id: PRODUCT_ID }),
+        ).rejects.toBeInstanceOf(ProductNotFoundError);
+        expect(cache.setNotFound).toHaveBeenCalledWith(PRODUCT_ID);
+        expect(cache.setProduct).not.toHaveBeenCalled();
+      },
+    );
+
+    it('"não existe" em cache para lojista → 404 sem chamar o repositório', async () => {
+      cache.get.mockResolvedValue({ kind: 'notFound' });
+
+      await expect(
+        service.get(retailer, { id: PRODUCT_ID }),
+      ).rejects.toBeInstanceOf(ProductNotFoundError);
+      expect(repository.findById).not.toHaveBeenCalled();
+    });
+
+    it('"não existe" em cache para fornecedor → vai ao repositório, porque ele pode ser o dono de um inativo', async () => {
+      cache.get.mockResolvedValue({ kind: 'notFound' });
+      repository.findById.mockResolvedValue(record({ active: false }));
+
+      await expect(
+        service.get(supplierA, { id: PRODUCT_ID }),
+      ).resolves.toMatchObject({ active: false });
+    });
+
+    it('dono lendo o próprio produto inativo → não grava nada no cache', async () => {
+      repository.findById.mockResolvedValue(record({ active: false }));
+
+      await service.get(supplierA, { id: PRODUCT_ID });
+
+      expect(cache.setProduct).not.toHaveBeenCalled();
+      expect(cache.setNotFound).not.toHaveBeenCalled();
+    });
+
+    it('id que não é UUID → 404 sem tocar o cache', async () => {
+      await expect(
+        service.get(retailer, { id: 'nao-e-uuid' }),
+      ).rejects.toBeInstanceOf(ProductNotFoundError);
+      expect(cache.get).not.toHaveBeenCalled();
+      expect(cache.setNotFound).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      [
+        'editar',
+        (s: ProductsService) =>
+          s.update(supplierA, { id: PRODUCT_ID, changes: { name: 'Y' } }),
+      ],
+      [
+        'reativar',
+        (s: ProductsService) =>
+          s.update(supplierA, { id: PRODUCT_ID, changes: { active: true } }),
+      ],
+      [
+        'adicionar variante',
+        (s: ProductsService) =>
+          s.addVariant(supplierA, { id: PRODUCT_ID, variant }),
+      ],
+      [
+        'editar variante',
+        (s: ProductsService) =>
+          s.updateVariant(supplierA, {
+            id: PRODUCT_ID,
+            sku: 'SKU-1',
+            changes: { minQuantity: 2 },
+          }),
+      ],
+      [
+        'desativar',
+        (s: ProductsService) => s.deactivate(supplierA, { id: PRODUCT_ID }),
+      ],
+    ])('%s com sucesso → invalida depois da escrita', async (_label, write) => {
+      repository.findById.mockResolvedValue(record());
+      const order: string[] = [];
+      repository.update.mockImplementation(async () => {
+        order.push('write');
+        return record();
+      });
+      repository.addVariant.mockImplementation(async () => {
+        order.push('write');
+        return record();
+      });
+      repository.updateVariant.mockImplementation(async () => {
+        order.push('write');
+        return record();
+      });
+      repository.setActive.mockImplementation(async () => {
+        order.push('write');
+      });
+      cache.invalidate.mockImplementation(async () => {
+        order.push('invalidate');
+      });
+
+      await write(service);
+
+      expect(cache.invalidate).toHaveBeenCalledWith(PRODUCT_ID);
+      expect(order).toEqual(['write', 'invalidate']);
+    });
+
+    it.each([
+      ['NotFound', null, undefined, ProductNotFoundError],
+      ['Conflict', record(), new SkuConflictError(), SkuConflictError],
+    ])(
+      'escrita que falha (%s) → não invalida',
+      async (_label, found, error, expectedError) => {
+        repository.findById.mockResolvedValue(found);
+        if (error) {
+          repository.addVariant.mockRejectedValue(error);
+        }
+
+        await expect(
+          service.addVariant(supplierA, { id: PRODUCT_ID, variant }),
+        ).rejects.toBeInstanceOf(expectedError);
+        expect(cache.invalidate).not.toHaveBeenCalled();
+      },
+    );
   });
 });

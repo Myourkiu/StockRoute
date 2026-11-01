@@ -62,6 +62,27 @@ services:
       timeout: 3s
       retries: 30
 
+  # Cache do catalog. Só cache: sem persistência (perder tudo num restart é
+  # aceitável, o banco é a fonte da verdade), memória limitada e despejo das
+  # chaves menos usadas (allkeys-lru) quando enche. Sem porta no host.
+  redis:
+    image: redis:8-alpine
+    command:
+      - redis-server
+      - --save
+      - ''
+      - --appendonly
+      - 'no'
+      - --maxmemory
+      - 64mb
+      - --maxmemory-policy
+      - allkeys-lru
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
   catalog-migrate:
     <<: *migrate
     build:
@@ -103,6 +124,9 @@ services:
       CATALOG_TCP_PORT: 18101
       CATALOG_HTTP_PORT: 18201
       HEALTH_PORT: 18201
+      CATALOG_REDIS_URL: redis://redis:6379
+    # Sem depends_on no Redis: o catalog sobe e responde mesmo sem ele (o cache
+    # só falha rápido e tudo vai ao banco), e conecta quando o Redis subir.
     depends_on:
       catalog-migrate:
         condition: service_completed_successfully

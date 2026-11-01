@@ -8,6 +8,7 @@ import type {
   UpdateProductData,
   UpdateVariantData,
 } from '@stockroute/contracts';
+import { ProductCache } from '../cache/product-cache';
 import { ForbiddenActionError, ProductNotFoundError } from './product.errors';
 import { ProductsRepository, type ProductRecord } from './products.repository';
 
@@ -17,9 +18,13 @@ type SupplierActor = Extract<Actor, { role: 'supplier' }>;
 
 // Casos de uso do catálogo. A posse é decidida aqui: produto de outro
 // fornecedor responde igual a um inexistente, para não revelar que ele existe.
+// A leitura usa cache-aside, e toda escrita invalida a chave depois de gravar.
 @Injectable()
 export class ProductsService {
-  constructor(private readonly repository: ProductsRepository) {}
+  constructor(
+    private readonly repository: ProductsRepository,
+    private readonly cache: ProductCache,
+  ) {}
 
   async create(actor: Actor, data: CreateProductData): Promise<ProductView> {
     const supplier = requireSupplier(actor);
@@ -35,15 +40,20 @@ export class ProductsService {
     { id, changes }: UpdateProductData,
   ): Promise<ProductView> {
     await this.findOwned(actor, id);
-    return toView(await this.repository.update(id, changes));
+    const updated = await this.invalidating(id, () =>
+      this.repository.update(id, changes),
+    );
+    return toView(updated);
   }
 
   // Idempotente: desativar um produto já inativo também é sucesso.
   async deactivate(actor: Actor, { id }: ProductIdData): Promise<void> {
     const product = await this.findOwned(actor, id);
-    if (product.active) {
-      await this.repository.setActive(id, false);
-    }
+    await this.invalidating(id, async () => {
+      if (product.active) {
+        await this.repository.setActive(id, false);
+      }
+    });
   }
 
   async addVariant(
@@ -51,7 +61,10 @@ export class ProductsService {
     { id, variant }: AddVariantData,
   ): Promise<ProductView> {
     await this.findOwned(actor, id);
-    return toView(await this.repository.addVariant(id, variant));
+    const updated = await this.invalidating(id, () =>
+      this.repository.addVariant(id, variant),
+    );
+    return toView(updated);
   }
 
   async updateVariant(
@@ -59,20 +72,51 @@ export class ProductsService {
     { id, sku, changes }: UpdateVariantData,
   ): Promise<ProductView> {
     await this.findOwned(actor, id);
-    const updated = await this.repository.updateVariant(id, sku, changes);
-    if (!updated) {
-      throw new ProductNotFoundError(id);
-    }
+    const updated = await this.invalidating(id, async () => {
+      const result = await this.repository.updateVariant(id, sku, changes);
+      if (!result) {
+        throw new ProductNotFoundError(id);
+      }
+      return result;
+    });
     return toView(updated);
   }
 
-  // Inativo só existe para o dono, que precisa vê-lo para reativar.
+  // Inativo só existe para o dono, que precisa vê-lo para reativar. O cache
+  // guarda só a visão pública: o produto ativo ou o "não existe".
   async get(actor: Actor, { id }: ProductIdData): Promise<ProductView> {
-    const product = await this.find(id);
-    if (!product.active && !isOwner(actor, product)) {
+    if (!UUID.test(id)) {
       throw new ProductNotFoundError(id);
     }
-    return toView(product);
+    const cached = await this.cache.get(id);
+    if (cached.kind === 'hit') {
+      return cached.product;
+    }
+    // "Não existe" vale para lojistas; um fornecedor pode ser o dono de um
+    // produto inativo, então ele segue para o banco.
+    if (cached.kind === 'notFound' && actor.role !== 'supplier') {
+      throw new ProductNotFoundError(id);
+    }
+    const product = await this.repository.findById(id);
+    if (product?.active) {
+      const view = toView(product);
+      await this.cache.setProduct(view);
+      return view;
+    }
+    if (product && isOwner(actor, product)) {
+      return toView(product);
+    }
+    if (cached.kind === 'miss') {
+      await this.cache.setNotFound(id);
+    }
+    throw new ProductNotFoundError(id);
+  }
+
+  // Invalida só depois que a escrita deu certo; se ela falhar, o cache fica.
+  private async invalidating<T>(id: string, write: () => Promise<T>) {
+    const result = await write();
+    await this.cache.invalidate(id);
+    return result;
   }
 
   private async find(id: string): Promise<ProductRecord> {

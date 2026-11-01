@@ -83,3 +83,20 @@ Erros cometidos pela IA durante o desenvolvimento e pegos antes de chegar à `ma
 
   Cada correção ganhou o teste que faltava.
 - **Lição:** ler o que a validação de uma biblioteca *não* faz (os casos em que ela pula), e não só o que ela faz; erro de entrada que vira 500 é sinal de validação incompleta na borda.
+
+## 2026-11-01 — Cache "à prova de falha" pela metade (PR #10, CodeRabbit)
+
+- **Suposição:** como o cache falha de forma segura (erro do Redis vira miss), o TTL bastaria como rede de segurança para uma invalidação perdida, e o catalog podia esperar o Redis ficar saudável no Compose.
+- **O que aconteceu:**
+  - se o `DEL` falhasse com o Redis fora durante uma desativação, a chave antiga continuaria lá quando ele voltasse, e um lojista veria o produto desativado por até 6 minutos, violando a regra de visibilidade;
+  - o `depends_on: service_healthy` fazia o catalog não subir sem Redis, o oposto do desenho em que o Redis é opcional;
+  - os TTLs vindos do ambiente não eram validados, e um valor inválido faria toda escrita no cache falhar em silêncio.
+- **Como foi pego:** revisão do CodeRabbit no PR #10.
+- **Correção:**
+  - invalidação que falha deixa o id pendente em memória, e o processo não lê a chave até apagá-la ou sobrescrevê-la;
+  - o catalog sobe sem esperar o Redis;
+  - TTL inválido impede a subida;
+  - valor fora do formato no cache vira miss.
+
+  A garantia durável da invalidação (outbox) ficou registrada como limite.
+- **Lição:** "falha segura" precisa ser checada em cada caminho, e não só no da leitura: o que acontece com a escrita quando a dependência volta, e se a configuração de subida não contradiz o desenho.
