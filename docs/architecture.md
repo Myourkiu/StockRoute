@@ -31,7 +31,7 @@ Exemplo: `PATCH /products/:id` de um fornecedor.
 3. **Gateway, `ValidationPipe`**: valida o corpo contra o DTO. Corpo inválido ou campo desconhecido para aqui com 400, listando os campos.
 4. **Gateway, controller**: envia a mensagem `catalog.product.update` por TCP com o envelope `{ actor, data }` e espera até 5 s.
 5. **Catalog, controller**: recebe a mensagem e chama o caso de uso.
-6. **Catalog, `ProductsService`**: confere que o ator é fornecedor e dono do produto (senão, "não encontrado"), grava pelo repositório e invalida o cache.
+6. **Catalog, `ProductsService`**: confere que o ator é fornecedor (senão, 403, repetindo o gateway como defesa em profundidade) e dono do produto (senão, "não encontrado", 404), grava pelo repositório e invalida o cache.
 7. **Catalog, `ProductsRepository`**: traduz para o Prisma, que escreve no schema `catalog`.
 8. **Volta**: um erro de domínio vira `{ status, message }` no filtro do catalog, e o gateway converte em HTTP (ver [api.md](api.md#erros)).
 

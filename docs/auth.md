@@ -21,7 +21,7 @@ Qualquer problema com o token responde 401 sem dizer qual foi. A mensagem não a
 | `AuthGuard` | gateway | quem é? (assinatura, expiração, claims coerentes) | 401 |
 | `RolesGuard` | gateway | o papel pode usar esta rota? (`@Roles` no handler) | 403 |
 | `ValidationPipe` | gateway | o corpo é válido? | 400 |
-| `ProductsService` | catalog | o ator é dono deste produto? | 404 |
+| `ProductsService` | catalog | o ator é fornecedor e dono deste produto? | 403 se não é fornecedor; 404 se não é o dono |
 
 O `AuthGuard` transforma as claims no **ator**, `{ role: 'supplier', supplierId }` ou `{ role: 'retailer' }`, e o anexa à requisição. O ator segue para o catalog dentro de toda mensagem TCP, no envelope `{ actor, data }`. Os serviços internos não veem o token.
 
