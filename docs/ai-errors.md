@@ -108,3 +108,11 @@ Erros cometidos pela IA durante o desenvolvimento e pegos antes de chegar à `ma
 
   A garantia durável da invalidação (outbox) ficou registrada como limite.
 - **Lição:** "falha segura" precisa ser checada em cada caminho, e não só no da leitura: o que acontece com a escrita quando a dependência volta, e se a configuração de subida não contradiz o desenho.
+
+## 2026-11-03 — Shutdown travado com o RabbitMQ travado (Etapa 2, fatia 3, PR 5)
+
+- **Suposição:** com o consumidor do RabbitMQ iniciado em segundo plano, um broker travado não afetaria o catalog: a subida não espera por ele, e o `app.close()` só fecharia a conexão.
+- **O que aconteceu:** o `close()` do `amqp-connection-manager` espera a conexão pendente terminar, e o `amqplib` não tem timeout de conexão por padrão. Com um broker que aceita a conexão TCP e nunca responde o handshake, o fechamento ficava preso para sempre. Num SIGTERM, o catalog não terminaria, e o orquestrador teria de matá-lo.
+- **Como foi pego:** o teste de subida com dependências travadas (`catalog-startup.int-spec.ts`, um servidor TCP que aceita e não responde) não terminava. Lendo o código instalado do `amqp-connection-manager`, o `close()` faz `Promise.resolve(this._connectPromise).then(...)`.
+- **Correção:** timeout de conexão de 5 s nas opções do RabbitMQ (`socketOptions.connectionOptions.timeout`), no client de publicação e no consumidor.
+- **Lição:** "dependência opcional" vale também para o desligamento, e não só para a subida e a leitura. Testar com a dependência _travada_ (aceita e não responde), e não só fora (conexão recusada), porque os dois quebram caminhos diferentes.
