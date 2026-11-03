@@ -26,11 +26,16 @@ Como o código é testado, revisado e entregue.
 **Testcontainers no projeto:**
 
 - `test/integration/postgres-container.ts` sobe o Postgres com o script de roles e schemas.
-- `test/integration/redis-container.ts` sobe o Redis e oferece `pause`/`unpause` (`docker pause`). Pausar simula uma dependência **travada**, com a conexão aberta e sem resposta, e permite religar. O `stop` do Testcontainers não permite religar.
+- `test/integration/redis-container.ts`, `rabbitmq-container.ts` e `elasticsearch-container.ts` sobem o Redis, o RabbitMQ e o Elasticsearch com as imagens do Compose. O do RabbitMQ tem `queueStats` (mensagens e consumidores de uma fila); o do Elasticsearch usa a mesma configuração do Compose.
+- `test/integration/docker.ts` oferece `pause`/`unpause` (`docker pause`). Pausar simula uma dependência **travada**, com a conexão aberta e sem resposta, e permite religar. O `stop` do Testcontainers não permite religar.
+- `test/integration/network.ts` tem `freePort` (porta sem ninguém escutando: conexão recusada) e `blackHole` (servidor que aceita a conexão e nunca responde: dependência travada sem subir container).
+- `test/integration/wait.ts` tem `within`, o polling com prazo para comportamento eventual ("aparece na busca em até 5 s"), sem sleep fixo.
 - `test/integration/prisma-migrate.ts` aplica as migrations do serviço com o mesmo CLI do migrator.
 - `test/fixtures/suppliers.ts` traz os UUIDs dos fornecedores do seed.
 
 **Os testes não checam tipos.** Com `isolatedModules`, o ts-jest só transpila. Um contrato quebrado passa nos testes e só é pego pelo `npm run typecheck` (ou pelo build). Rode o typecheck antes de abrir PR.
+
+**Trabalho em segundo plano iniciado num `beforeAll`** (o consumidor RabbitMQ, por exemplo) precisa terminar de iniciar dentro do hook. O Jest recusa `import()` dinâmico entre testes, e o Nest transforma essa recusa em `process.exit(1)`. Os testes da busca esperam o consumidor aparecer na fila antes de seguir.
 
 **Mocks:** use `jest.fn<Retorno, Args>()` como funções soltas. Com `jest.Mocked<Classe>`, o lint `unbound-method` acusa cada `expect(mock.metodo)`.
 
