@@ -144,7 +144,10 @@ describe('Reindexer', () => {
   it('bulk falha → apaga o índice novo, não troca o alias, e o erro sobe', async () => {
     const repository = mockRepository([products(10)]);
     const { index, calls } = mockIndex();
-    index.bulkIndex.mockRejectedValueOnce(new Error('item rejeitado'));
+    index.bulkIndex.mockImplementationOnce(() => {
+      calls.push('bulk');
+      return Promise.reject(new Error('item rejeitado'));
+    });
 
     await expect(reindexer(repository, index).run()).rejects.toThrow(
       'item rejeitado',
