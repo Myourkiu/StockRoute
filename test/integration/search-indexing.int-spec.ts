@@ -26,7 +26,7 @@ import {
 import { freePort } from './network';
 import { connectionUrl, startPostgres } from './postgres-container';
 import { migrateDeploy } from './prisma-migrate';
-import { startRabbitMQ } from './rabbitmq-container';
+import { queueStats, startRabbitMQ } from './rabbitmq-container';
 import { within } from './wait';
 
 const supplier: Actor = { role: 'supplier', supplierId: SUPPLIER_ALFA };
@@ -80,22 +80,6 @@ describe('indexação da busca com RabbitMQ e Elasticsearch (integração)', () 
     return { result, elapsed: Date.now() - started };
   }
 
-  // Mensagens na fila do indexador, prontas ou entregues e sem ack.
-  async function queueDepth(): Promise<number> {
-    const { output } = await rabbit.exec([
-      'rabbitmqctl',
-      'list_queues',
-      '--quiet',
-      '--no-table-headers',
-      'name',
-      'messages',
-    ]);
-    const line = output
-      .split('\n')
-      .find((row) => row.trim().startsWith(INDEXER_QUEUE));
-    return line ? Number(line.trim().split(/\s+/)[1]) : 0;
-  }
-
   beforeAll(async () => {
     [postgres, rabbit, elastic] = await Promise.all([
       startPostgres(),
@@ -116,6 +100,13 @@ describe('indexação da busca com RabbitMQ e Elasticsearch (integração)', () 
     client = ClientProxyFactory.create({
       transport: Transport.TCP,
       options: { host: '127.0.0.1', port: tcpPort },
+    });
+    // O consumidor conecta em segundo plano; os testes começam com ele já
+    // escutando a fila. Esperar aqui também mantém o import dinâmico do
+    // amqplib dentro do hook (o Jest recusa imports entre testes).
+    await within(30_000, async () => {
+      const { consumers } = await queueStats(rabbit, INDEXER_QUEUE);
+      return consumers > 0;
     });
   }, 180_000);
 
@@ -212,7 +203,7 @@ describe('indexação da busca com RabbitMQ e Elasticsearch (integração)', () 
 
       // Passado o timeout de 2 s do cliente do ES, o indexador já desistiu.
       await new Promise((resolve) => setTimeout(resolve, 3000));
-      expect(await queueDepth()).toBe(0);
+      expect((await queueStats(rabbit, INDEXER_QUEUE)).messages).toBe(0);
     } finally {
       await unpause(elastic);
     }
