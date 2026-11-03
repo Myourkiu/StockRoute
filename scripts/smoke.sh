@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Smoke do sistema em containers: sobe os 5 serviços, confere a saúde agregada,
 # o CRUD de produtos pelo gateway, o cache do produto, a busca, a falha de um
-# serviço, o que a imagem de execução leva, as portas publicadas e um segundo
-# `up` sem apagar dados.
+# serviço, o broker e o índice fora (com a reindexação), o que a imagem de
+# execução leva, as portas publicadas e um segundo `up` sem apagar dados.
 # Uso: scripts/smoke.sh (precisa do Docker; termina com `down`, sem -v).
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -44,6 +44,17 @@ search_has() {
 }
 
 search_lacks() { ! search_has "$@"; }
+
+# Cria um produto pelo gateway e imprime o id. create_product "<nome>" "<categoria>"
+create_product() {
+  local sku="SMOKE-$(date +%s%N)"
+  local code
+  code=$(curl -s -o /tmp/smoke-created.json -w '%{http_code}' -X POST localhost:18000/products \
+    -H "Authorization: $supplier" -H 'Content-Type: application/json' \
+    -d "{\"name\":\"$1\",\"description\":\"\",\"category\":\"$2\",\"tags\":[],\"variants\":[{\"sku\":\"$sku\",\"attributes\":{},\"wholesalePriceCents\":100,\"minQuantity\":1,\"initialStock\":1}]}")
+  [ "$code" = 201 ] || fail "POST /products ($1) respondeu $code: $(cat /tmp/smoke-created.json)"
+  json_field "$(cat /tmp/smoke-created.json)" id
+}
 
 # Token de desenvolvimento assinado com o mesmo segredo que o gateway está usando.
 token() {
@@ -115,13 +126,43 @@ ok "GET /health 503 com orders down e os demais up"
 docker compose start orders
 docker compose up -d --wait
 
+echo "== RabbitMQ parado e reindexação"
+docker compose stop rabbitmq
+offline_id=$(create_product "Smoke sem broker" smoke-reindex)
+ok "com o RabbitMQ parado, criar responde 201"
+docker compose up -d --wait rabbitmq
+npm run --silent catalog:reindex >/tmp/smoke-reindex.log 2>&1 \
+  || fail "catalog:reindex falhou: $(cat /tmp/smoke-reindex.log)"
+eventually 5 search_has "category=smoke-reindex" "$offline_id" \
+  || fail "depois da reindexação, o produto criado sem broker não está na busca"
+ok "catalog:reindex roda no container, e o produto criado sem broker está na busca"
+# O consumidor reconecta sozinho (tentativas a cada 5 s), sem reiniciar o catalog.
+online_id=$(create_product "Smoke broker de volta" smoke-reconnect)
+eventually 20 search_has "category=smoke-reconnect" "$online_id" \
+  || fail "com o RabbitMQ de volta, um produto novo não chegou à busca em 20 s"
+ok "com o RabbitMQ de volta, um produto novo chega à busca sem reindexar"
+
+echo "== Elasticsearch parado"
+docker compose stop elasticsearch
+code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: $retailer" localhost:18000/products/search)
+[ "$code" = 503 ] || fail "com o Elasticsearch parado, a busca respondeu $code"
+code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: $retailer" "localhost:18000/products/$online_id")
+[ "$code" = 200 ] || fail "com o Elasticsearch parado, o GET por id respondeu $code"
+body=$(curl -s localhost:18000/health)
+[ "$(service_status "$body" catalog)" = up ] || fail "com o Elasticsearch parado, o catalog não está up: $body"
+docker compose up -d --wait elasticsearch
+ok "com o Elasticsearch parado, busca 503, GET 200 e o catalog continua pronto"
+
 echo "== imagem de execução do catalog"
 docker compose run --rm --no-deps --entrypoint sh catalog -c '
   ! test -e node_modules/.bin/prisma || { echo "binário prisma presente"; exit 1; }
   ! find . -name "*.ts" -not -path "./node_modules/*" | grep -q . || { echo "arquivos .ts presentes"; exit 1; }
   test "$(id -u)" != 0 || { echo "rodando como root"; exit 1; }
+  for dep in amqplib amqp-connection-manager @elastic/elasticsearch; do
+    test -d "node_modules/$dep" || { echo "$dep ausente"; exit 1; }
+  done
 ' || fail "imagem de execução do catalog"
-ok "sem CLI do Prisma, sem .ts e sem root"
+ok "sem CLI do Prisma, sem .ts, sem root, e com o cliente do RabbitMQ e do Elasticsearch"
 
 echo "== portas publicadas"
 published=$(docker compose ps --format '{{range .Publishers}}{{if .PublishedPort}}{{.PublishedPort}} {{end}}{{end}}' \
