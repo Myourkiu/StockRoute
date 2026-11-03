@@ -6,7 +6,9 @@ import {
   type CatalogRequest,
   type CreateProductData,
   type ProductIdData,
+  type ProductSearchPage,
   type ProductView,
+  type SearchProductsData,
   type UpdateProductData,
   type UpdateVariantData,
 } from '@stockroute/contracts';
@@ -62,5 +64,12 @@ export class ProductsController {
     @Payload() { actor, data }: CatalogRequest<ProductIdData>,
   ): Promise<ProductView> {
     return this.products.get(actor, data);
+  }
+
+  @MessagePattern(CATALOG_PATTERNS.search)
+  search(
+    @Payload() { data }: CatalogRequest<SearchProductsData>,
+  ): Promise<ProductSearchPage> {
+    return this.products.search(data);
   }
 }

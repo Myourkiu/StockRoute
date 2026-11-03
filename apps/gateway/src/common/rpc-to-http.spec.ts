@@ -4,7 +4,7 @@ import { toHttpException } from './rpc-to-http';
 
 // Tradução de erro do catalog (TCP) para HTTP no gateway (T06, D07).
 describe('toHttpException', () => {
-  it.each([403, 404, 409, 500])(
+  it.each([400, 403, 404, 409, 500, 503])(
     'erro do contrato com status %i vira HTTP %i com { statusCode, message }',
     (status) => {
       const error = toHttpException({ status, message: 'detalhe' });

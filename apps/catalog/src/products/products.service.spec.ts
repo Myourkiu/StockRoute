@@ -1,5 +1,7 @@
 import type { Actor, ProductView, VariantInput } from '@stockroute/contracts';
 import type { ProductCache } from '../cache/product-cache';
+import type { ProductEvents } from '../events/product-events';
+import type { ProductIndex } from '../search/product-index';
 import {
   ForbiddenActionError,
   ProductNotFoundError,
@@ -87,19 +89,38 @@ function mockCache() {
   };
 }
 
+function mockEvents() {
+  return { publishUpserted: jest.fn<void, [string]>() };
+}
+
+function mockIndex() {
+  return {
+    search: jest.fn<
+      ReturnType<ProductIndex['search']>,
+      Parameters<ProductIndex['search']>
+    >(),
+  };
+}
+
 // Regras do catálogo (T03) com o repositório mockado: posse, visibilidade de
 // produto inativo e desativação idempotente.
 describe('ProductsService', () => {
   let repository: ReturnType<typeof mockRepository>;
   let cache: ReturnType<typeof mockCache>;
+  let events: ReturnType<typeof mockEvents>;
+  let index: ReturnType<typeof mockIndex>;
   let service: ProductsService;
 
   beforeEach(() => {
     repository = mockRepository();
     cache = mockCache();
+    events = mockEvents();
+    index = mockIndex();
     service = new ProductsService(
       repository as unknown as ProductsRepository,
       cache as unknown as ProductCache,
+      events as unknown as ProductEvents,
+      index as unknown as ProductIndex,
     );
   });
 
@@ -440,5 +461,123 @@ describe('ProductsService', () => {
         expect(cache.invalidate).not.toHaveBeenCalled();
       },
     );
+  });
+
+  // Evento de produto alterado (fatia 3, T03): publicado depois de cada
+  // escrita com sucesso, e só depois de invalidar o cache. Escrita que falha
+  // não publica nada.
+  describe('publicação do evento', () => {
+    it('criar com sucesso → publica o id do produto criado', async () => {
+      repository.create.mockResolvedValue(record());
+
+      await service.create(supplierA, {
+        name: 'Camiseta',
+        description: 'Algodão',
+        category: 'vestuario',
+        tags: [],
+        variants: [variant],
+      });
+
+      expect(events.publishUpserted).toHaveBeenCalledWith(PRODUCT_ID);
+    });
+
+    it.each([
+      [
+        'editar',
+        (s: ProductsService) =>
+          s.update(supplierA, { id: PRODUCT_ID, changes: { name: 'Y' } }),
+      ],
+      [
+        'reativar',
+        (s: ProductsService) =>
+          s.update(supplierA, { id: PRODUCT_ID, changes: { active: true } }),
+      ],
+      [
+        'adicionar variante',
+        (s: ProductsService) =>
+          s.addVariant(supplierA, { id: PRODUCT_ID, variant }),
+      ],
+      [
+        'editar variante',
+        (s: ProductsService) =>
+          s.updateVariant(supplierA, {
+            id: PRODUCT_ID,
+            sku: 'SKU-1',
+            changes: { minQuantity: 2 },
+          }),
+      ],
+      [
+        'desativar',
+        (s: ProductsService) => s.deactivate(supplierA, { id: PRODUCT_ID }),
+      ],
+    ])(
+      '%s com sucesso → publica depois de invalidar',
+      async (_label, write) => {
+        repository.findById.mockResolvedValue(record());
+        repository.update.mockResolvedValue(record());
+        repository.addVariant.mockResolvedValue(record());
+        repository.updateVariant.mockResolvedValue(record());
+        const order: string[] = [];
+        cache.invalidate.mockImplementation(async () => {
+          order.push('invalidate');
+        });
+        events.publishUpserted.mockImplementation(() => {
+          order.push('publish');
+        });
+
+        await write(service);
+
+        expect(events.publishUpserted).toHaveBeenCalledWith(PRODUCT_ID);
+        expect(order).toEqual(['invalidate', 'publish']);
+      },
+    );
+
+    it.each([
+      [
+        'NotFound',
+        (s: ProductsService) =>
+          s.update(supplierA, { id: PRODUCT_ID, changes: { name: 'Y' } }),
+        () => undefined,
+      ],
+      [
+        'Conflict',
+        (s: ProductsService) =>
+          s.addVariant(supplierA, { id: PRODUCT_ID, variant }),
+        (repository: ReturnType<typeof mockRepository>) => {
+          repository.findById.mockResolvedValue(record());
+          repository.addVariant.mockRejectedValue(new SkuConflictError());
+        },
+      ],
+      [
+        'Forbidden',
+        (s: ProductsService) =>
+          s.create(retailer, {
+            name: 'Camiseta',
+            description: 'Algodão',
+            category: 'vestuario',
+            tags: [],
+            variants: [variant],
+          }),
+        () => undefined,
+      ],
+    ])(
+      'escrita que falha (%s) → não publica',
+      async (_label, write, arrange) => {
+        repository.findById.mockResolvedValue(null);
+        arrange(repository);
+
+        await expect(write(service)).rejects.toThrow();
+        expect(events.publishUpserted).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  // Busca (fatia 3, T04): a mesma para qualquer papel, direto no índice.
+  it('search devolve a página do índice para os filtros recebidos', async () => {
+    const page = { items: [], nextCursor: null };
+    index.search.mockResolvedValue(page);
+
+    await expect(service.search({ q: 'camiseta' })).resolves.toBe(page);
+    expect(index.search).toHaveBeenCalledWith({ q: 'camiseta' });
   });
 });

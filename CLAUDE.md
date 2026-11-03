@@ -16,6 +16,7 @@ npm run test                 # unitários, sem Docker
 npm run test:e2e             # e2e e integração (Testcontainers, precisa do Docker)
 npm run build                # os 5 apps
 npm run token -- supplier <uuid>   # JWT de desenvolvimento (ou: retailer)
+npm run catalog:reindex      # reconstrói o índice de busca (com o Compose de pé)
 bash scripts/smoke.sh        # sobe tudo no Compose e confere ponta a ponta
 ```
 
@@ -24,7 +25,7 @@ bash scripts/smoke.sh        # sobe tudo no Compose e confere ponta a ponta
 Monorepo Nest 12 (CommonJS) com 5 apps em `apps/` e os contratos entre serviços em `libs/contracts` (`@stockroute/contracts`).
 
 - **gateway**: única porta de entrada (HTTP 18000). Valida o JWT, o papel e o corpo, e fala com os serviços por TCP.
-- **catalog**: produtos, variações e estoque. Postgres (schema `catalog`) e cache no Redis.
+- **catalog**: produtos, variações, estoque e busca. Postgres (schema `catalog`), cache no Redis, eventos no RabbitMQ e índice de busca no Elasticsearch.
 - **orders** e **integration**: por enquanto só a base (saúde, banco e migration inicial).
 - **erp-mock**: ERP simulado, só HTTP.
 
@@ -40,7 +41,7 @@ Visão completa: [docs/architecture.md](docs/architecture.md).
 4. **Só o gateway vê o token.** O gateway decide autenticação (401) e papel (403). A posse do recurso é decidida pelo serviço dono do dado. Recurso de outro dono responde 404, igual a um inexistente. O dono vem sempre do token, nunca do corpo. [docs/auth.md](docs/auth.md)
 5. **Toda entrada é validada na borda, e erro de entrada nunca vira 500.** Um 500 causado por dado do cliente é validação que faltou. No gateway: `whitelist` com campo desconhecido rejeitado, `IsDefinedOrAbsent` em vez de `IsOptional` (que deixa passar `null`), inteiros limitados a `PG_INT_MAX` e dinheiro em centavos inteiros. [docs/api.md](docs/api.md)
 6. **O banco é a fonte da verdade; cache e índices são cópias descartáveis.** Nenhuma escrita depende deles. Cache invalida depois do commit, guarda só a visão pública e usa chave versionada: mudou o formato do valor, sobe a versão da chave. [docs/catalog.md](docs/catalog.md)
-7. **Dependência opcional não derruba nada.** Redis (e, nas próximas etapas, broker e índice) falha rápido e degrada para o banco. Ela não entra no readiness nem como condição de subida no Compose. O readiness depende só do banco. [docs/architecture.md](docs/architecture.md#saúde-liveness-e-readiness)
+7. **Dependência opcional não derruba nada.** Redis, RabbitMQ e Elasticsearch falham rápido e degradam (o banco continua atendendo); toda chamada a eles tem timeout, inclusive conectar e fechar. Ela não entra no readiness nem como condição de subida no Compose. O readiness depende só do banco. [docs/architecture.md](docs/architecture.md#saúde-liveness-e-readiness)
 8. **Segredo só por variável de ambiente, nunca com valor padrão versionado.** O Compose exige `JWT_SECRET`; o `.env.example` traz só valores de desenvolvimento. [docs/environment.md](docs/environment.md)
 9. **Portas dos serviços na faixa 18000–18299.** A única exceção é a porta do Postgres no host, 18432, presa a 127.0.0.1. Só o gateway (18000) e o Postgres são publicados no host. Serviço novo não ganha porta no host. [docs/infrastructure.md](docs/infrastructure.md#portas)
 10. **Teste antes do código, no nível que prova o comportamento.** Regra de negócio em unitário; transação, unicidade, TTL e falha de dependência só com Postgres e Redis reais (Testcontainers); fluxo da API em e2e pelo gateway. Um teste que deveria falhar precisa ser visto falhando. [docs/development.md](docs/development.md)
@@ -68,6 +69,10 @@ Cada linha veio de um erro real. O relato completo está em [docs/ai-errors.md](
 | Teste que "falha" no ambiente errado | Confira a versão ou o ambiente que o teste usa de fato, e veja o teste falhar ao menos uma vez. |
 | `jest.Mocked<Classe>` nos testes | O lint `unbound-method` acusa. Use `jest.fn<Retorno, Args>()` como funções soltas. |
 | Escrever arquivo com Python no Windows | O modo texto grava CRLF. Use `newline=''` ou rode o Prettier depois. |
+| Testar dependência opcional só com conexão recusada | Teste também travada (aceita e não responde: `blackHole` ou `docker pause`). Foi assim que apareceu o shutdown preso no RabbitMQ sem timeout de conexão. |
+| Iniciar trabalho em segundo plano num `beforeAll` | O `import()` dinâmico depois do hook é recusado pelo Jest, e o Nest chama `process.exit(1)`. Espere o trabalho terminar de iniciar dentro do hook. |
+| `@EventPattern(...)` com `@Ctx() context: RmqContext` | A assinatura tipada do Nest 12 exige `unknown` depois do dado. Use `@EventPattern<string>(...)`. |
+| Rodar o Prettier em `docs/` | O projeto só formata `.ts`; o Prettier reescreveria as tabelas dos `.md`. Rode-o só nos caminhos do `format`. |
 
 ## Documentação
 
@@ -78,7 +83,7 @@ Cada linha veio de um erro real. O relato completo está em [docs/ai-errors.md](
 | [docs/api.md](docs/api.md) | Rotas públicas, formato de erro, status e validação |
 | [docs/auth.md](docs/auth.md) | JWT, guards, papéis, posse e tokens de desenvolvimento |
 | [docs/catalog.md](docs/catalog.md) | Modelo de dados do catálogo e cache do produto |
-| [docs/infrastructure.md](docs/infrastructure.md) | Postgres (roles e schemas), migrations, Redis, imagens, Compose e portas |
+| [docs/infrastructure.md](docs/infrastructure.md) | Postgres (roles e schemas), migrations, Redis, RabbitMQ, Elasticsearch, imagens, Compose e portas |
 | [docs/environment.md](docs/environment.md) | Variáveis de ambiente de cada serviço |
 | [docs/development.md](docs/development.md) | Testes, CI, convenções de código e fluxo de PR |
 | [docs/ai-errors.md](docs/ai-errors.md) | Erros da IA, como foram pegos e a lição |

@@ -1,4 +1,5 @@
 import type { estypes } from '@elastic/elasticsearch';
+import type { SearchProductsData } from '@stockroute/contracts';
 import {
   decodeCursor,
   encodeCursor,
@@ -8,14 +9,7 @@ import {
 
 export const DEFAULT_LIMIT = 20;
 
-export interface SearchParams {
-  q?: string;
-  category?: string;
-  minPriceCents?: number;
-  maxPriceCents?: number;
-  cursor?: string;
-  limit?: number;
-}
+export type SearchParams = SearchProductsData;
 
 export interface SearchHit<T> {
   _source: T;

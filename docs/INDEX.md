@@ -23,6 +23,6 @@ Para agentes de IA, o ponto de partida é o [CLAUDE.md](../CLAUDE.md).
 
 | Documento | Conteúdo |
 |---|---|
-| [infrastructure.md](infrastructure.md) | Postgres com um role e um schema por serviço, migrations e migrator, Redis, Dockerfile multi-stage, Compose, portas, smoke |
+| [infrastructure.md](infrastructure.md) | Postgres com um role e um schema por serviço, migrations e migrator, Redis, RabbitMQ, Elasticsearch, Dockerfile multi-stage, Compose, portas, smoke |
 | [development.md](development.md) | Níveis de teste e onde cada um roda, Testcontainers, pipeline de CI, CodeRabbit, convenções de código, fluxo de PR e commits |
 | [ai-errors.md](ai-errors.md) | Erros que a IA cometeu no projeto, como foram pegos e a lição de cada um |

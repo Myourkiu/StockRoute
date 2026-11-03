@@ -1,18 +1,13 @@
-import { NestFactory } from '@nestjs/core';
-import { MicroserviceOptions, Transport } from '@nestjs/microservices';
-import { CatalogModule } from './catalog.module';
+import { startCatalog } from './bootstrap';
+import { runReindexCommand } from './reindex-command';
 
-// App híbrida: TCP para as mensagens do gateway e HTTP interno para as probes.
-async function bootstrap() {
-  const app = await NestFactory.create(CatalogModule);
-  app.connectMicroservice<MicroserviceOptions>({
-    transport: Transport.TCP,
-    options: {
-      host: '0.0.0.0',
-      port: Number(process.env.CATALOG_TCP_PORT ?? 18101),
-    },
+// `node dist/main.js reindex` roda a reindexação e sai; sem argumento, sobe o
+// serviço.
+if (process.argv[2] === 'reindex') {
+  void runReindexCommand().then((code) => process.exit(code));
+} else {
+  void startCatalog({
+    tcpPort: Number(process.env.CATALOG_TCP_PORT ?? 18101),
+    httpPort: Number(process.env.CATALOG_HTTP_PORT ?? 18201),
   });
-  await app.startAllMicroservices();
-  await app.listen(Number(process.env.CATALOG_HTTP_PORT ?? 18201));
 }
-void bootstrap();

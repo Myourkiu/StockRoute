@@ -1,6 +1,6 @@
 # Infraestrutura
 
-Como o sistema roda localmente: um Postgres compartilhado com isolamento por serviço, um Redis de cache, uma imagem Docker por app e o Compose subindo tudo com um comando.
+Como o sistema roda localmente: um Postgres compartilhado com isolamento por serviço, um Redis de cache, um RabbitMQ e um Elasticsearch para a busca, uma imagem Docker por app e o Compose subindo tudo com um comando.
 
 ## Postgres
 
@@ -45,6 +45,22 @@ Cache do catalog, `redis:8-alpine`, sem porta no host:
 
 O catalog não depende do Redis para subir nem para o readiness. Sem o Redis, o cache só falha rápido e tudo vai ao banco. Desenho do cache em [catalog.md](catalog.md#cache-da-leitura).
 
+## RabbitMQ
+
+Broker dos eventos do catalog, `rabbitmq:4-alpine`, sem porta no host. Hoje há uma fila, `catalog.indexer` (durável), que leva os eventos de produto ao indexador da busca.
+
+O catalog usa um usuário próprio (`stockroute`, senha em `RABBITMQ_PASSWORD`) em vez do `guest/guest`, que é uma credencial conhecida e que a imagem oficial libera para qualquer endereço.
+
+## Elasticsearch
+
+Índice de busca do catalog, `elasticsearch:9.5.5`, sem porta no host:
+
+- **um nó só** (`discovery.type: single-node`), com heap de 512 MB;
+- **segurança desligada**, só porque é ambiente local e o ES não sai da rede do Compose;
+- **sem o limite de disco**, para o ES não bloquear o índice numa máquina com pouco espaço livre, e sem o download das bases de geoip, que o catalog não usa.
+
+O índice é uma cópia descartável do Postgres ([catalog.md](catalog.md#eventos-e-indexação-da-busca)). Como o Redis, o RabbitMQ e o Elasticsearch não são condição de subida do catalog nem entram no readiness dele.
+
 ## Imagens
 
 Um único `Dockerfile` para todos os apps: o build arg `APP` escolhe o app, e o `--target` escolhe a imagem.
@@ -59,13 +75,13 @@ Um único `Dockerfile` para todos os apps: o build arg `APP` escolhe o app, e o 
 
 **Por que `--omit=optional`:** o CLI do Prisma e o TypeScript são dependências de desenvolvimento, mas também peers opcionais do `@prisma/client`, e o npm os marca como `devOptional`. O `--omit=dev` sozinho os mantém. Com os dois, a imagem de execução caiu de 750 MB para 379 MB. O smoke falha se o binário do Prisma ou arquivos `.ts` aparecerem na imagem, ou se ela rodar como root.
 
-Dependências que o Nest declara como peer opcional (`ioredis` hoje, `amqplib` nas próximas etapas) sobrevivem ao prune porque estão em `dependencies` do projeto.
+Dependências que o Nest declara como peer opcional (`ioredis`, `amqplib` e `amqp-connection-manager`) sobrevivem ao prune porque estão em `dependencies` do projeto.
 
 ## Compose
 
 `docker compose up -d --build --wait` sobe, nesta ordem:
 
-1. `postgres` (healthcheck por `pg_isready` via TCP) e `redis` (healthcheck por `redis-cli ping`);
+1. `postgres` (healthcheck por `pg_isready` via TCP), `redis` (`redis-cli ping`), `rabbitmq` (`rabbitmq-diagnostics ping`) e `elasticsearch` (saúde do cluster ao menos amarela);
 2. os três `*-migrate`, depois do Postgres saudável;
 3. `catalog`, `orders` e `integration`, cada um depois do seu migrator; e o `erp-mock`;
 4. o `gateway`, com `depends_on` só como ordem de subida.
@@ -85,6 +101,8 @@ Faixa reservada do projeto: **18000–18299**, escolhida para não colidir com o
 | 18101, 18102, 18103 | catalog, orders, integration (TCP) | não |
 | 18201, 18202, 18203, 18204 | probes HTTP de catalog, orders, integration, erp-mock | não |
 | 6379 | Redis (dentro da rede do Compose) | não |
+| 5672 | RabbitMQ (dentro da rede do Compose) | não |
+| 9200 | Elasticsearch (dentro da rede do Compose) | não |
 
 As portas internas só aparecem no host quando os processos rodam fora do Docker (`node dist/apps/<app>/main.js`).
 
@@ -96,9 +114,12 @@ As portas internas só aparecem no host quando os processos rodam fora do Docker
 2. `GET /health` com os quatro serviços `up`;
 3. CRUD de produto pelo gateway (criar, ler, desativar, sem token);
 4. cache: chave do produto no Redis com TTL entre 240 e 360 s, e o GET ainda funcionando com o Redis parado;
-5. `GET /health` 503 com o orders parado e os demais `up`;
-6. imagem de execução sem CLI do Prisma, sem `.ts` e sem root;
-7. só as portas 18000 e 18432 publicadas;
-8. `down` e `up` sem apagar dados, com os três migrators dizendo que não há migration pendente.
+5. busca: o produto criado aparece na busca em até 5 s, e sai dela em até 5 s depois de desativado;
+6. `GET /health` 503 com o orders parado e os demais `up`;
+7. RabbitMQ parado: criar responde 201; com ele de volta, `npm run catalog:reindex` roda no container e o produto está na busca, e um produto novo chega à busca sem reindexar (o consumidor reconecta sozinho);
+8. Elasticsearch parado: busca 503, GET por id 200, e o catalog continua `up`;
+9. imagem de execução sem CLI do Prisma, sem `.ts` e sem root, e com `amqplib`, `amqp-connection-manager` e `@elastic/elasticsearch`;
+10. só as portas 18000 e 18432 publicadas;
+11. `down` e `up` sem apagar dados, com os três migrators dizendo que não há migration pendente.
 
 Sem `.env` nem `JWT_SECRET` no ambiente, o smoke gera um segredo aleatório. O smoke roda localmente e ainda não faz parte do CI.

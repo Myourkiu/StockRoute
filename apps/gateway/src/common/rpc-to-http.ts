@@ -1,7 +1,7 @@
 import { HttpException } from '@nestjs/common';
 import type { CatalogRpcError } from '@stockroute/contracts';
 
-const CONTRACT_STATUSES = new Set<number>([403, 404, 409, 500]);
+const CONTRACT_STATUSES = new Set<number>([400, 403, 404, 409, 500, 503]);
 
 // Converte o erro recebido do catalog por TCP numa resposta HTTP:
 // - erro do contrato ({ status, message }) → o mesmo status;

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Smoke do sistema em containers: sobe os 5 serviços, confere a saúde agregada,
-# o CRUD de produtos pelo gateway, o cache do produto, a falha de um serviço, o que a imagem de execução leva, as portas publicadas e
-# um segundo `up` sem apagar dados.
+# o CRUD de produtos pelo gateway, o cache do produto, a busca, a falha de um
+# serviço, o broker e o índice fora (com a reindexação), o que a imagem de
+# execução leva, as portas publicadas e um segundo `up` sem apagar dados.
 # Uso: scripts/smoke.sh (precisa do Docker; termina com `down`, sem -v).
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -24,6 +25,43 @@ service_status() {
 # Campo de um JSON, ex.: json_field "$body" id
 json_field() {
   node -e 'console.log(JSON.parse(process.argv[1])[process.argv[2]] ?? "")' "$1" "$2"
+}
+
+# Repete um comando até ele dar certo ou passarem N segundos, ex.:
+# eventually 5 search_has "category=smoke" "$id"
+eventually() {
+  local deadline=$((SECONDS + $1))
+  shift
+  until "$@"; do
+    [ "$SECONDS" -lt "$deadline" ] || return 1
+    sleep 0.5
+  done
+}
+
+# A busca do lojista traz o produto? search_has "<query string>" "<id>"
+search_has() {
+  curl -s -H "Authorization: $retailer" "localhost:18000/products/search?$1"     | node -e 'let s = ""; process.stdin.on("data", (d) => (s += d)).on("end", () => process.exit((JSON.parse(s).items ?? []).some((i) => i.id === process.argv[1]) ? 0 : 1))' "$2"
+}
+
+search_lacks() { ! search_has "$@"; }
+
+# Cria um produto pelo gateway e imprime o id. create_product "<nome>" "<categoria>"
+create_product() {
+  local sku="SMOKE-$(date +%s%N)"
+  local code
+  code=$(curl -s -o /tmp/smoke-created.json -w '%{http_code}' -X POST localhost:18000/products \
+    -H "Authorization: $supplier" -H 'Content-Type: application/json' \
+    -d "{\"name\":\"$1\",\"description\":\"\",\"category\":\"$2\",\"tags\":[],\"variants\":[{\"sku\":\"$sku\",\"attributes\":{},\"wholesalePriceCents\":100,\"minQuantity\":1,\"initialStock\":1}]}")
+  [ "$code" = 201 ] || fail "POST /products ($1) respondeu $code: $(cat /tmp/smoke-created.json)"
+  json_field "$(cat /tmp/smoke-created.json)" id
+}
+
+# O catalog tem um consumidor ligado à fila do indexador?
+catalog_consuming() {
+  local consumers
+  consumers=$(docker compose exec -T rabbitmq rabbitmqctl list_queues --quiet --no-table-headers name consumers \
+    | tr -d '\r' | awk '$1 == "catalog.indexer" { print $2 }')
+  [ "${consumers:-0}" -ge 1 ]
 }
 
 # Token de desenvolvimento assinado com o mesmo segredo que o gateway está usando.
@@ -70,13 +108,18 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: $retailer" "loc
 docker compose start redis
 ok "com o Redis parado, o GET segue pelo banco (200)"
 
+echo "== busca"
+eventually 5 search_has "category=smoke" "$id" || fail "o produto não apareceu na busca em 5 s"
+ok "produto na busca em até 5 s (escrita → RabbitMQ → Elasticsearch)"
+
 code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE -H "Authorization: $supplier" "localhost:18000/products/$id")
 [ "$code" = 204 ] || fail "DELETE respondeu $code"
 code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: $retailer" "localhost:18000/products/$id")
 [ "$code" = 404 ] || fail "GET do produto desativado respondeu $code"
+eventually 5 search_lacks "category=smoke" "$id" || fail "o produto desativado continuou na busca depois de 5 s"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:18000/products)
 [ "$code" = 401 ] || fail "POST sem token respondeu $code"
-ok "criar 201, ler 200, desativar 204, ler 404, sem token 401"
+ok "criar 201, ler 200, desativar 204, ler 404 e fora da busca, sem token 401"
 
 echo "== orders parado"
 docker compose stop orders
@@ -91,13 +134,46 @@ ok "GET /health 503 com orders down e os demais up"
 docker compose start orders
 docker compose up -d --wait
 
+echo "== RabbitMQ parado e reindexação"
+docker compose stop rabbitmq
+offline_id=$(create_product "Smoke sem broker" smoke-reindex)
+ok "com o RabbitMQ parado, criar responde 201"
+docker compose up -d --wait rabbitmq
+# O catalog reconecta sozinho (tentativas a cada 2 s), sem reiniciar. Até lá,
+# os eventos publicados se perdem (dual write), e a reindexação corrige.
+eventually 30 catalog_consuming || fail "o consumidor do catalog não voltou à fila em 30 s"
+ok "com o RabbitMQ de volta, o consumidor do catalog reconecta sozinho"
+npm run --silent catalog:reindex >/tmp/smoke-reindex.log 2>&1 \
+  || fail "catalog:reindex falhou: $(cat /tmp/smoke-reindex.log)"
+eventually 5 search_has "category=smoke-reindex" "$offline_id" \
+  || fail "depois da reindexação, o produto criado sem broker não está na busca"
+ok "catalog:reindex roda no container, e o produto criado sem broker está na busca"
+online_id=$(create_product "Smoke broker de volta" smoke-reconnect)
+eventually 10 search_has "category=smoke-reconnect" "$online_id" \
+  || fail "com o RabbitMQ de volta, um produto novo não chegou à busca em 10 s"
+ok "com o RabbitMQ de volta, um produto novo chega à busca sem reindexar"
+
+echo "== Elasticsearch parado"
+docker compose stop elasticsearch
+code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: $retailer" localhost:18000/products/search)
+[ "$code" = 503 ] || fail "com o Elasticsearch parado, a busca respondeu $code"
+code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: $retailer" "localhost:18000/products/$online_id")
+[ "$code" = 200 ] || fail "com o Elasticsearch parado, o GET por id respondeu $code"
+body=$(curl -s localhost:18000/health)
+[ "$(service_status "$body" catalog)" = up ] || fail "com o Elasticsearch parado, o catalog não está up: $body"
+docker compose up -d --wait elasticsearch
+ok "com o Elasticsearch parado, busca 503, GET 200 e o catalog continua pronto"
+
 echo "== imagem de execução do catalog"
 docker compose run --rm --no-deps --entrypoint sh catalog -c '
   ! test -e node_modules/.bin/prisma || { echo "binário prisma presente"; exit 1; }
   ! find . -name "*.ts" -not -path "./node_modules/*" | grep -q . || { echo "arquivos .ts presentes"; exit 1; }
   test "$(id -u)" != 0 || { echo "rodando como root"; exit 1; }
+  for dep in amqplib amqp-connection-manager @elastic/elasticsearch; do
+    test -d "node_modules/$dep" || { echo "$dep ausente"; exit 1; }
+  done
 ' || fail "imagem de execução do catalog"
-ok "sem CLI do Prisma, sem .ts e sem root"
+ok "sem CLI do Prisma, sem .ts, sem root, e com o cliente do RabbitMQ e do Elasticsearch"
 
 echo "== portas publicadas"
 published=$(docker compose ps --format '{{range .Publishers}}{{if .PublishedPort}}{{.PublishedPort}} {{end}}{{end}}' \
