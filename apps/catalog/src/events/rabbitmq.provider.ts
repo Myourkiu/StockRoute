@@ -18,12 +18,18 @@ export const CATALOG_EVENTS_CLIENT = Symbol('CATALOG_EVENTS_CLIENT');
 // restart do broker não apagar eventos ainda não consumidos.
 export const INDEXER_QUEUE = 'catalog.indexer';
 
+// Sem timeout, o amqplib espera para sempre um broker que aceita a conexão e
+// não responde. E o `close()` do amqp-connection-manager espera essa conexão
+// pendente: o shutdown do catalog travaria junto com o broker.
+const CONNECT_TIMEOUT_MS = 5000;
+
 function queueOptions(url: string): RmqOptions['options'] {
   return {
     urls: [url],
     queue: INDEXER_QUEUE,
     queueOptions: { durable: true },
     persistent: true,
+    socketOptions: { connectionOptions: { timeout: CONNECT_TIMEOUT_MS } },
   };
 }
 
