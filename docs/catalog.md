@@ -121,6 +121,8 @@ Até a troca, a busca responde com o índice antigo. Se algo falhar antes dela (
 
 O catalog sobe e fica pronto sem o RabbitMQ e sem o ES. O consumidor e a criação do índice começam em segundo plano e conectam quando eles voltarem. As conexões ao RabbitMQ têm timeout de 5 s, para um broker travado não segurar o shutdown.
 
+**Quando o RabbitMQ volta**, o catalog reconecta sozinho, tentando a cada 2 s. Até reconectar, o client do Nest recusa toda publicação na hora: os eventos dessa janela se perdem, como os do tempo em que o broker esteve fora, e a reindexação os corrige.
+
 | Variável | Padrão | O que faz |
 |---|---|---|
 | `CATALOG_RABBITMQ_URL` | — | URL do RabbitMQ; sem ela, os eventos ficam desligados (a escrita funciona e o índice não é atualizado) |
