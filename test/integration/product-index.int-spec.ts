@@ -130,6 +130,23 @@ describe('ProductIndex (Elasticsearch real)', () => {
     });
   });
 
+  it('duas instâncias criando o índice ao mesmo tempo → um único products_*, sem erro em nenhuma', async () => {
+    const results = await Promise.allSettled([
+      new ProductIndex(
+        createElasticsearchClient(elasticsearchUrl(container))!,
+      ).ensure(),
+      new ProductIndex(
+        createElasticsearchClient(elasticsearchUrl(container))!,
+      ).ensure(),
+    ]);
+
+    expect(results.map((result) => result.status)).toEqual([
+      'fulfilled',
+      'fulfilled',
+    ]);
+    expect(await productIndices()).toHaveLength(1);
+  });
+
   it('upsert sem ensure antes cria o índice pelo alias, e não um índice "products"', async () => {
     await seed(product());
 
