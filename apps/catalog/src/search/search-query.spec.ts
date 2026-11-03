@@ -1,5 +1,9 @@
 import { encodeCursor } from './search-cursor';
-import { buildSearchRequest, toSearchPage, type SearchHit } from './search-query';
+import {
+  buildSearchRequest,
+  toSearchPage,
+  type SearchHit,
+} from './search-query';
 
 const ID = '33333333-3333-4333-8333-333333333333';
 
@@ -27,7 +31,7 @@ describe('buildSearchRequest', () => {
         filter: [],
       },
     });
-    expect(request.sort).toEqual([{ _score: 'desc' }, { id: 'asc' }]);
+    expect(request.sort).toEqual([{ _score: { order: 'desc' } }, { id: 'asc' }]);
   });
 
   it.each([
