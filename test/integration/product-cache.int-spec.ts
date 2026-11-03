@@ -16,7 +16,8 @@ import type { Actor, ProductView } from '@stockroute/contracts';
 import { SUPPLIER_ALFA } from '../fixtures/suppliers';
 import { connectionUrl, startPostgres } from './postgres-container';
 import { migrateDeploy } from './prisma-migrate';
-import { pause, startRedis, unpause } from './redis-container';
+import { pause, unpause } from './docker';
+import { startRedis } from './redis-container';
 
 const supplier: Actor = { role: 'supplier', supplierId: SUPPLIER_ALFA };
 const retailer: Actor = { role: 'retailer' };
