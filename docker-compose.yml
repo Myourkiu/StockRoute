@@ -84,9 +84,10 @@ services:
       timeout: 3s
       retries: 30
 
-  # Broker dos eventos do catalog (fila do indexador da busca). O usuário
-  # padrão "guest" só conecta de localhost, então o catalog usa um usuário
-  # próprio. Sem porta no host.
+  # Broker dos eventos do catalog (fila do indexador da busca). Usuário próprio
+  # em vez do guest/guest, que é uma credencial conhecida e que a imagem oficial
+  # libera para qualquer endereço (loopback_users.guest = false). Sem porta no
+  # host.
   rabbitmq:
     image: rabbitmq:4-alpine
     environment:
