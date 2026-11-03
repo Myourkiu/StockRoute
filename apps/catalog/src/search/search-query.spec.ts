@@ -31,7 +31,10 @@ describe('buildSearchRequest', () => {
         filter: [],
       },
     });
-    expect(request.sort).toEqual([{ _score: { order: 'desc' } }, { id: 'asc' }]);
+    expect(request.sort).toEqual([
+      { _score: { order: 'desc' } },
+      { id: 'asc' },
+    ]);
   });
 
   it.each([
