@@ -56,6 +56,14 @@ create_product() {
   json_field "$(cat /tmp/smoke-created.json)" id
 }
 
+# O catalog tem um consumidor ligado à fila do indexador?
+catalog_consuming() {
+  local consumers
+  consumers=$(docker compose exec -T rabbitmq rabbitmqctl list_queues --quiet --no-table-headers name consumers \
+    | tr -d '\r' | awk '$1 == "catalog.indexer" { print $2 }')
+  [ "${consumers:-0}" -ge 1 ]
+}
+
 # Token de desenvolvimento assinado com o mesmo segredo que o gateway está usando.
 token() {
   JWT_SECRET="$(docker compose exec -T gateway printenv JWT_SECRET)" node scripts/issue-token.mjs "$@"
@@ -131,15 +139,18 @@ docker compose stop rabbitmq
 offline_id=$(create_product "Smoke sem broker" smoke-reindex)
 ok "com o RabbitMQ parado, criar responde 201"
 docker compose up -d --wait rabbitmq
+# O catalog reconecta sozinho (tentativas a cada 2 s), sem reiniciar. Até lá,
+# os eventos publicados se perdem (dual write), e a reindexação corrige.
+eventually 30 catalog_consuming || fail "o consumidor do catalog não voltou à fila em 30 s"
+ok "com o RabbitMQ de volta, o consumidor do catalog reconecta sozinho"
 npm run --silent catalog:reindex >/tmp/smoke-reindex.log 2>&1 \
   || fail "catalog:reindex falhou: $(cat /tmp/smoke-reindex.log)"
 eventually 5 search_has "category=smoke-reindex" "$offline_id" \
   || fail "depois da reindexação, o produto criado sem broker não está na busca"
 ok "catalog:reindex roda no container, e o produto criado sem broker está na busca"
-# O consumidor reconecta sozinho (tentativas a cada 5 s), sem reiniciar o catalog.
 online_id=$(create_product "Smoke broker de volta" smoke-reconnect)
-eventually 20 search_has "category=smoke-reconnect" "$online_id" \
-  || fail "com o RabbitMQ de volta, um produto novo não chegou à busca em 20 s"
+eventually 10 search_has "category=smoke-reconnect" "$online_id" \
+  || fail "com o RabbitMQ de volta, um produto novo não chegou à busca em 10 s"
 ok "com o RabbitMQ de volta, um produto novo chega à busca sem reindexar"
 
 echo "== Elasticsearch parado"
