@@ -95,3 +95,16 @@ export interface CatalogRpcError {
   status: 403 | 404 | 409 | 500;
   message: string;
 }
+
+// Eventos que o catalog publica no RabbitMQ. Hoje quem consome é o próprio
+// catalog (o indexador da busca); o contrato fica aqui como o das mensagens TCP.
+export const CATALOG_EVENTS = {
+  productUpserted: 'catalog.product.upserted',
+} as const;
+
+// Evento magro: diz só qual produto mudou e quando. Quem consome relê o estado
+// atual no banco, então a ordem e a repetição dos eventos não importam.
+export interface ProductUpsertedEvent {
+  productId: string;
+  occurredAt: string;
+}
