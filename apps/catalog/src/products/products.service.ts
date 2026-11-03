@@ -4,12 +4,15 @@ import type {
   AddVariantData,
   CreateProductData,
   ProductIdData,
+  ProductSearchPage,
   ProductView,
+  SearchProductsData,
   UpdateProductData,
   UpdateVariantData,
 } from '@stockroute/contracts';
 import { ProductCache } from '../cache/product-cache';
 import { ProductEvents } from '../events/product-events';
+import { ProductIndex } from '../search/product-index';
 import { ForbiddenActionError, ProductNotFoundError } from './product.errors';
 import { ProductsRepository, type ProductRecord } from './products.repository';
 
@@ -27,6 +30,7 @@ export class ProductsService {
     private readonly repository: ProductsRepository,
     private readonly cache: ProductCache,
     private readonly events: ProductEvents,
+    private readonly index: ProductIndex,
   ) {}
 
   async create(actor: Actor, data: CreateProductData): Promise<ProductView> {
@@ -114,6 +118,11 @@ export class ProductsService {
       await this.cache.setNotFound(id);
     }
     throw new ProductNotFoundError(id);
+  }
+
+  // A busca é igual para qualquer papel: o índice só tem produtos ativos.
+  search(filters: SearchProductsData): Promise<ProductSearchPage> {
+    return this.index.search(filters);
   }
 
   // Invalida e publica só depois que a escrita deu certo; se ela falhar, o

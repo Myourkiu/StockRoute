@@ -7,6 +7,7 @@ export const CATALOG_PATTERNS = {
   addVariant: { cmd: 'catalog.product.add-variant' },
   updateVariant: { cmd: 'catalog.product.update-variant' },
   get: { cmd: 'catalog.product.get' },
+  search: { cmd: 'catalog.product.search' },
 } as const;
 
 // Quem faz a chamada, já autenticado pelo gateway. O catalog confia nele e
@@ -90,9 +91,40 @@ export interface ProductView {
   variants: VariantView[];
 }
 
+// Filtros da busca, iguais para lojista e fornecedor. Preços em centavos; o
+// cursor é opaco para o cliente (vem do `nextCursor` da página anterior).
+export interface SearchProductsData {
+  q?: string;
+  category?: string;
+  minPriceCents?: number;
+  maxPriceCents?: number;
+  cursor?: string;
+  limit?: number;
+}
+
+// Item da busca: o que o índice guarda do produto, com o menor e o maior
+// preço entre as variantes. O estoque não vem na busca, só no GET por id.
+export interface ProductSearchItem {
+  id: string;
+  supplierId: string;
+  name: string;
+  description: string;
+  category: string;
+  tags: string[];
+  minPriceCents: number;
+  maxPriceCents: number;
+}
+
+// `nextCursor` nulo: é a última página.
+export interface ProductSearchPage {
+  items: ProductSearchItem[];
+  nextCursor: string | null;
+}
+
 // Formato do erro que o catalog devolve; o gateway o converte em HTTP.
+// 400 é cursor de busca inválido; 503, o índice de busca indisponível.
 export interface CatalogRpcError {
-  status: 403 | 404 | 409 | 500;
+  status: 400 | 403 | 404 | 409 | 500 | 503;
   message: string;
 }
 

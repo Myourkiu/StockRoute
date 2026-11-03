@@ -1,23 +1,16 @@
 import type { estypes } from '@elastic/elasticsearch';
+import type { ProductSearchItem } from '@stockroute/contracts';
 
 // A busca e o indexador sempre usam o alias. O índice real tem o timestamp no
 // nome, para a reindexação construir um novo ao lado e só então trocar o alias.
 export const PRODUCTS_ALIAS = 'products';
 export const PRODUCTS_INDEX_PREFIX = 'products_';
 
-export interface ProductDocument {
-  id: string;
-  supplierId: string;
-  name: string;
-  description: string;
-  category: string;
-  tags: string[];
+// O documento é o item da busca mais os preços de todas as variantes, que só
+// servem ao filtro.
+export interface ProductDocument extends ProductSearchItem {
   variantPricesCents: number[];
-  minPriceCents: number;
-  maxPriceCents: number;
 }
-
-export type ProductSearchItem = Omit<ProductDocument, 'variantPricesCents'>;
 
 // Um shard e nenhuma réplica: é um nó só, e com réplica o índice ficaria
 // amarelo para sempre. Um shard também deixa o score igual entre as buscas.
