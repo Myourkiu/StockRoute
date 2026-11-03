@@ -1,5 +1,6 @@
 import { Client, errors } from '@elastic/elasticsearch';
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { ProductSearchItem } from '@stockroute/contracts';
 import type { ProductRecord } from '../products/products.repository';
 import { ELASTICSEARCH } from './elasticsearch.provider';
 import {
@@ -8,7 +9,6 @@ import {
   PRODUCTS_ALIAS,
   PRODUCTS_INDEX_PREFIX,
   type ProductDocument,
-  type ProductSearchItem,
 } from './product-index.mapping';
 import type { SortValues } from './search-cursor';
 import {
