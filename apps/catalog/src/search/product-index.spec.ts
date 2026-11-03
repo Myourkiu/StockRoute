@@ -1,4 +1,5 @@
 import type { Client } from '@elastic/elasticsearch';
+import { Logger } from '@nestjs/common';
 import type { ProductRecord } from '../products/products.repository';
 import { ProductIndex, toDocument } from './product-index';
 import { InvalidCursorError, SearchUnavailableError } from './search.errors';
@@ -87,6 +88,41 @@ describe('ProductIndex', () => {
     expect(client.search).not.toHaveBeenCalled();
   });
 
+  it('falha do ES na busca → SearchUnavailableError com a causa original', async () => {
+    const client = mockClient();
+    const cause = new Error('timeout');
+    client.search.mockRejectedValue(cause);
+    const index = new ProductIndex(client as unknown as Client);
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+
+    await expect(index.search({})).rejects.toMatchObject({
+      name: 'SearchUnavailableError',
+      cause,
+    });
+  });
+
+  it('outra instância criou o índice ao mesmo tempo → ensure aceita o alias dela', async () => {
+    const client = mockClient();
+    client.indices.existsAlias
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    client.indices.create.mockRejectedValue(
+      new Error('alias [products] has more than one write index'),
+    );
+    const index = new ProductIndex(client as unknown as Client);
+
+    await expect(index.ensure()).resolves.toBeUndefined();
+  });
+
+  it('criação do índice falha sem que o alias exista → o erro sobe', async () => {
+    const client = mockClient();
+    client.indices.existsAlias.mockResolvedValue(false);
+    client.indices.create.mockRejectedValue(new Error('ES fora'));
+    const index = new ProductIndex(client as unknown as Client);
+
+    await expect(index.ensure()).rejects.toThrow('ES fora');
+  });
+
   it('ensure que falhou tenta de novo na próxima chamada', async () => {
     const client = mockClient();
     client.indices.existsAlias
@@ -118,7 +154,9 @@ describe('ProductIndex', () => {
     await index.upsert(record);
 
     expect(client.indices.create).toHaveBeenCalledWith(
-      expect.objectContaining({ aliases: { products: {} } }),
+      expect.objectContaining({
+        aliases: { products: { is_write_index: true } },
+      }),
     );
     expect(client.index).toHaveBeenCalledWith({
       index: 'products',
