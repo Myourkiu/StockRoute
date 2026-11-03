@@ -74,7 +74,7 @@ O readiness do próprio gateway não depende dos serviços internos: o gateway p
 | Identidade por JWT e CRUD de produtos e variações | pronto (Etapa 2) |
 | Cache do produto no Redis | pronto (Etapa 2) |
 | Indexação por eventos e busca no Elasticsearch | pronto (Etapa 2) |
-| Reindexação completa sem a busca sair do ar | próxima (Etapa 2, fatia 4) |
+| Reindexação completa sem a busca sair do ar (`npm run catalog:reindex`) | pronta (Etapa 2) |
 | Pedidos, outbox, reserva de estoque | próximas etapas (Etapa 3) |
 | Integração com o ERP, retry, DLQ | próximas etapas (Etapa 4) |
 | Kubernetes | próximas etapas (Etapa 5) |

@@ -132,3 +132,19 @@ Erros cometidos pela IA durante o desenvolvimento e pegos antes de chegar à `ma
 - **Como foi pego:** o teste de indexação ponta a ponta. A causa só apareceu logando o erro dentro do `loadPackage`, numa alteração local e temporária em `node_modules`, desfeita depois.
 - **Correção:** o `beforeAll` espera o consumidor aparecer na fila (`queueStats`) antes de terminar. Isso também deixa os testes determinísticos.
 - **Lição:** trabalho assíncrono iniciado num hook precisa terminar dentro dele. Quando uma biblioteca troca o erro por `process.exit`, achar a causa exige logar no ponto em que ela engole o erro.
+
+## 2026-11-03 — "Com o broker de volta, o próximo evento chega" (Etapa 2, fatia 4)
+
+- **Suposição:** depois de o RabbitMQ voltar e ficar saudável, o próximo produto criado já iria para a busca pelo evento.
+- **O que aconteceu:**
+  - o client do Nest reconecta em segundo plano, pelo `amqp-connection-manager`, a cada 5 s por padrão;
+  - até lá, toda publicação é recusada na hora, com um texto (`'Error: Connection lost. Trying to reconnect...'`), e não um `Error`;
+  - o evento do produto criado logo depois da volta do broker se perdeu, e o log dizia "not published: undefined".
+- **Como foi pego:** o passo novo do smoke ("com o RabbitMQ de volta, um produto novo chega à busca sem reindexar") falhou. Os logs do catalog mostraram a recusa e a reconexão no mesmo segundo, logo depois do evento perdido.
+- **Correção:**
+  - reconexão a cada 2 s, no client e no consumidor, para encurtar a janela;
+  - o log trata erro que não é `Error`;
+  - o smoke espera o consumidor voltar à fila antes de esperar o evento.
+
+  A janela continua existindo por desenho (dual write), e a reindexação corrige.
+- **Lição:** "a dependência voltou" e "o cliente reconectou" são momentos diferentes. Testar a recuperação, e não só a queda, e conferir o tipo do erro que a biblioteca rejeita antes de ler `.message`.

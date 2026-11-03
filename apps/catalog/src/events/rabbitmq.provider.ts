@@ -23,13 +23,23 @@ export const INDEXER_QUEUE = 'catalog.indexer';
 // pendente: o shutdown do catalog travaria junto com o broker.
 const CONNECT_TIMEOUT_MS = 5000;
 
+// Depois de perder o broker, o amqp-connection-manager tenta reconectar em
+// segundo plano (o padrão é a cada 5 s). Até reconectar, o client do Nest
+// recusa toda publicação na hora, e esses eventos se perdem (a reindexação
+// corrige). Tentar a cada 2 s encurta essa janela depois que o broker volta,
+// sem encher o log enquanto ele está fora.
+const RECONNECT_SECONDS = 2;
+
 function queueOptions(url: string): RmqOptions['options'] {
   return {
     urls: [url],
     queue: INDEXER_QUEUE,
     queueOptions: { durable: true },
     persistent: true,
-    socketOptions: { connectionOptions: { timeout: CONNECT_TIMEOUT_MS } },
+    socketOptions: {
+      connectionOptions: { timeout: CONNECT_TIMEOUT_MS },
+      reconnectTimeInSeconds: RECONNECT_SECONDS,
+    },
   };
 }
 

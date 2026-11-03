@@ -87,7 +87,7 @@ Os dois fornecedores vêm de uma migration de seed.
 | `POST /products/:id/variants` | dono | adiciona uma variante |
 | `PATCH /products/:id/variants/:sku` | dono | edita atributos, preço ou quantidade mínima |
 
-O `GET /products/:id` passa por um cache no Redis (cache-aside). A busca usa um índice no Elasticsearch, atualizado por eventos no RabbitMQ depois de cada escrita, e um produto novo aparece nela em alguns segundos. Detalhes em [`docs/catalog.md`](docs/catalog.md).
+O `GET /products/:id` passa por um cache no Redis (cache-aside). A busca usa um índice no Elasticsearch, atualizado por eventos no RabbitMQ depois de cada escrita, e um produto novo aparece nela em alguns segundos. O índice pode ser reconstruído a partir do banco, sem a busca sair do ar, com `npm run catalog:reindex` (com o Compose de pé). Detalhes em [`docs/catalog.md`](docs/catalog.md).
 
 Valores em centavos inteiros (`wholesalePriceCents`). O estoque não é editável pela API. Sem token ou com token inválido a resposta é 401; papel errado, 403. Editar ou desativar produto de outro fornecedor responde 404, igual a um inexistente, e o mesmo vale para ler um produto inativo de outro fornecedor. Produto ativo é visível para qualquer token.
 

@@ -33,9 +33,12 @@ export class ProductEvents {
       .emit(CATALOG_EVENTS.productUpserted, event)
       .pipe(timeout(PUBLISH_TIMEOUT_MS))
       .subscribe({
-        error: (error: Error) =>
+        // O client do Nest rejeita com texto, e não com Error, enquanto reconecta.
+        error: (error: unknown) =>
           this.logger.warn(
-            `Event for product ${productId} not published: ${error.message}`,
+            `Event for product ${productId} not published: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
           ),
       });
   }

@@ -10,6 +10,7 @@ import { elasticsearchProvider } from '../../apps/catalog/src/search/elasticsear
 import { ProductIndex } from '../../apps/catalog/src/search/product-index';
 import { Reindexer } from '../../apps/catalog/src/search/reindexer';
 import { SUPPLIER_ALFA } from '../fixtures/suppliers';
+import { seedActiveProducts } from './catalog-seed';
 import {
   elasticsearchUrl,
   startElasticsearch,
@@ -52,38 +53,6 @@ describe('Reindexer (Postgres e Elasticsearch reais)', () => {
         },
       ],
     });
-  }
-
-  // Muitos produtos de uma vez, direto pelo Prisma: criar um a um levaria
-  // segundos sem testar nada a mais.
-  async function createMany(count: number) {
-    const rows = Array.from({ length: count }, (_, n) => ({
-      id: randomUUID(),
-      sku: `BULK-${n + 1}`,
-    }));
-    await prisma.product.createMany({
-      data: rows.map(({ id }, n) => ({
-        id,
-        supplierId: SUPPLIER_ALFA,
-        name: `Produto em lote ${n + 1}`,
-        description: '',
-        category: 'lote',
-        tags: [],
-      })),
-    });
-    await prisma.variant.createMany({
-      data: rows.map(({ id, sku }) => ({
-        productId: id,
-        sku,
-        attributes: {},
-        wholesalePriceCents: 1000,
-        minQuantity: 1,
-      })),
-    });
-    await prisma.stock.createMany({
-      data: rows.map(({ sku }) => ({ sku, available: 1 })),
-    });
-    return rows.map(({ id }) => id);
   }
 
   async function productIndices(): Promise<string[]> {
@@ -180,7 +149,7 @@ describe('Reindexer (Postgres e Elasticsearch reais)', () => {
   });
 
   it('1.201 produtos → todos no índice, sem repetir', async () => {
-    const ids = await createMany(1201);
+    const ids = await seedActiveProducts(prisma, 1201, 'BULK');
 
     await expect(reindexer().run()).resolves.toBe(1201);
 
