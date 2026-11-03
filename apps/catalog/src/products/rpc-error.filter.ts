@@ -11,6 +11,10 @@ import {
   ProductNotFoundError,
   SkuConflictError,
 } from './product.errors';
+import {
+  InvalidCursorError,
+  SearchUnavailableError,
+} from '../search/search.errors';
 
 // Traduz os erros de domínio no formato de erro do contrato. O client TCP do
 // gateway recebe esse objeto como erro e o converte em HTTP. Um erro
@@ -32,6 +36,12 @@ export class CatalogRpcErrorFilter implements RpcExceptionFilter {
     }
     if (error instanceof SkuConflictError) {
       return { status: 409, message: error.message };
+    }
+    if (error instanceof InvalidCursorError) {
+      return { status: 400, message: error.message };
+    }
+    if (error instanceof SearchUnavailableError) {
+      return { status: 503, message: error.message };
     }
     this.logger.error(error);
     return { status: 500, message: 'Internal error' };
