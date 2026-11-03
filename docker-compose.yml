@@ -1,7 +1,8 @@
 # Sobe o sistema inteiro com `docker compose up --wait`. Só o gateway (18000) e
 # o Postgres (18432, para inspeção local) são publicados no host.
 # As senhas padrão são só de desenvolvimento; um .env sobrescreve (ver .env.example).
-# As senhas dos serviços entram literais nas URLs de conexão: use só [A-Za-z0-9_-].
+# As senhas dos serviços (banco e RabbitMQ) entram literais nas URLs de conexão:
+# use só [A-Za-z0-9_-].
 name: stockroute
 
 x-db-passwords: &db-passwords
@@ -83,6 +84,40 @@ services:
       timeout: 3s
       retries: 30
 
+  # Broker dos eventos do catalog (fila do indexador da busca). O usuário
+  # padrão "guest" só conecta de localhost, então o catalog usa um usuário
+  # próprio. Sem porta no host.
+  rabbitmq:
+    image: rabbitmq:4-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: stockroute
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-rabbitmq_pw}
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+  # Índice de busca do catalog. Um nó só, segurança desligada (só no ambiente
+  # local) e heap de 512 MB. Sem o limite de disco, o ES não bloqueia o índice
+  # numa máquina com pouco espaço livre; sem o download de bases de geoip, que
+  # o catalog não usa. Sem porta no host.
+  elasticsearch:
+    image: elasticsearch:9.5.5
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: 'false'
+      cluster.routing.allocation.disk.threshold_enabled: 'false'
+      ingest.geoip.downloader.enabled: 'false'
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fs 'http://127.0.0.1:9200/_cluster/health?wait_for_status=yellow&timeout=1s' || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
   catalog-migrate:
     <<: *migrate
     build:
@@ -125,8 +160,11 @@ services:
       CATALOG_HTTP_PORT: 18201
       HEALTH_PORT: 18201
       CATALOG_REDIS_URL: redis://redis:6379
-    # Sem depends_on no Redis: o catalog sobe e responde mesmo sem ele (o cache
-    # só falha rápido e tudo vai ao banco), e conecta quando o Redis subir.
+      CATALOG_RABBITMQ_URL: amqp://stockroute:${RABBITMQ_PASSWORD:-rabbitmq_pw}@rabbitmq:5672
+      CATALOG_ELASTICSEARCH_URL: http://elasticsearch:9200
+    # Sem depends_on no Redis, no RabbitMQ e no Elasticsearch: o catalog sobe e
+    # responde sem eles (cache, eventos e busca degradam), e conecta quando eles
+    # subirem.
     depends_on:
       catalog-migrate:
         condition: service_completed_successfully
