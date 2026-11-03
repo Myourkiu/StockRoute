@@ -53,6 +53,18 @@ describe('ProductEvents', () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('broker fora'));
   });
 
+  it('emit rejeitado com texto (o client do Nest, reconectando) → o texto vai para o log', () => {
+    client.emit.mockReturnValue(
+      throwError(() => 'Error: Connection lost. Trying to reconnect...'),
+    );
+
+    events.publishUpserted(ID);
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Connection lost'),
+    );
+  });
+
   it('emit que nunca termina → retorna na hora, e o timeout de 5 s só é logado', () => {
     jest.useFakeTimers();
     client.emit.mockReturnValue(NEVER);
