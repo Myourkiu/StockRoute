@@ -24,6 +24,7 @@ import {
   elasticsearchProvider,
 } from './search/elasticsearch.provider';
 import { ProductIndex } from './search/product-index';
+import { Reindexer } from './search/reindexer';
 
 // Redis, RabbitMQ e Elasticsearch são opcionais: sem a URL de cada um, o
 // provider devolve `null` e a funcionalidade fica desligada (cache, eventos ou
@@ -51,6 +52,7 @@ import { ProductIndex } from './search/product-index';
     ProductIndex,
     ElasticsearchShutdown,
     ProductIndexer,
+    Reindexer,
   ],
 })
 export class CatalogModule {}
