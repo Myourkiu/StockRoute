@@ -116,3 +116,19 @@ Erros cometidos pela IA durante o desenvolvimento e pegos antes de chegar à `ma
 - **Como foi pego:** o teste de subida com dependências travadas (`catalog-startup.int-spec.ts`, um servidor TCP que aceita e não responde) não terminava. Lendo o código instalado do `amqp-connection-manager`, o `close()` faz `Promise.resolve(this._connectPromise).then(...)`.
 - **Correção:** timeout de conexão de 5 s nas opções do RabbitMQ (`socketOptions.connectionOptions.timeout`), no client de publicação e no consumidor.
 - **Lição:** "dependência opcional" vale também para o desligamento, e não só para a subida e a leitura. Testar com a dependência _travada_ (aceita e não responde), e não só fora (conexão recusada), porque os dois quebram caminhos diferentes.
+
+## 2026-11-03 — `@EventPattern` tipado com o contexto do RMQ (Etapa 2, fatia 3, PR 3)
+
+- **Suposição:** `@EventPattern(padrão, Transport.RMQ)` aceitaria um handler `(event, @Ctx() context: RmqContext)`, como no exemplo da documentação do Nest.
+- **O que aconteceu:** no Nest 12, a sobrecarga tipada do `@EventPattern` exige `(data, ...args: unknown[])`, e o `RmqContext` no segundo parâmetro não compila (TS1241).
+- **Como foi pego:** `npm run typecheck`. Os testes passavam, porque o ts-jest não checa tipos.
+- **Correção:** `@EventPattern<string>(...)`, que escolhe a sobrecarga sem tipo, com um comentário explicando o porquê.
+- **Lição:** exemplos de documentação podem estar atrás da versão; o typecheck é o que confirma a assinatura.
+
+## 2026-11-03 — Import dinâmico "entre testes" derrubava o Jest (Etapa 2, fatia 3, PR 6)
+
+- **Suposição:** subir o catalog no `beforeAll`, com o consumidor RabbitMQ iniciando em segundo plano, seria igual a subi-lo dentro do teste.
+- **O que aconteceu:** o servidor RMQ do Nest carrega o `amqplib` com `import()` dinâmico, e isso acontecia depois de o hook terminar. O Jest recusa imports fora de um teste ou hook ("outside of the scope of the test code"), e o `loadPackage` do Nest engole o erro e chama `process.exit(1)`. A suíte morria só com "process.exit called with 1".
+- **Como foi pego:** o teste de indexação ponta a ponta. A causa só apareceu logando o erro dentro do `loadPackage`, numa alteração local e temporária em `node_modules`, desfeita depois.
+- **Correção:** o `beforeAll` espera o consumidor aparecer na fila (`queueStats`) antes de terminar. Isso também deixa os testes determinísticos.
+- **Lição:** trabalho assíncrono iniciado num hook precisa terminar dentro dele. Quando uma biblioteca troca o erro por `process.exit`, achar a causa exige logar no ponto em que ela engole o erro.

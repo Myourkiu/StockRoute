@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Smoke do sistema em containers: sobe os 5 serviços, confere a saúde agregada,
-# o CRUD de produtos pelo gateway, o cache do produto, a falha de um serviço, o que a imagem de execução leva, as portas publicadas e
-# um segundo `up` sem apagar dados.
+# o CRUD de produtos pelo gateway, o cache do produto, a busca, a falha de um
+# serviço, o que a imagem de execução leva, as portas publicadas e um segundo
+# `up` sem apagar dados.
 # Uso: scripts/smoke.sh (precisa do Docker; termina com `down`, sem -v).
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -25,6 +26,24 @@ service_status() {
 json_field() {
   node -e 'console.log(JSON.parse(process.argv[1])[process.argv[2]] ?? "")' "$1" "$2"
 }
+
+# Repete um comando até ele dar certo ou passarem N segundos, ex.:
+# eventually 5 search_has "category=smoke" "$id"
+eventually() {
+  local deadline=$((SECONDS + $1))
+  shift
+  until "$@"; do
+    [ "$SECONDS" -lt "$deadline" ] || return 1
+    sleep 0.5
+  done
+}
+
+# A busca do lojista traz o produto? search_has "<query string>" "<id>"
+search_has() {
+  curl -s -H "Authorization: $retailer" "localhost:18000/products/search?$1"     | node -e 'let s = ""; process.stdin.on("data", (d) => (s += d)).on("end", () => process.exit((JSON.parse(s).items ?? []).some((i) => i.id === process.argv[1]) ? 0 : 1))' "$2"
+}
+
+search_lacks() { ! search_has "$@"; }
 
 # Token de desenvolvimento assinado com o mesmo segredo que o gateway está usando.
 token() {
@@ -70,13 +89,18 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: $retailer" "loc
 docker compose start redis
 ok "com o Redis parado, o GET segue pelo banco (200)"
 
+echo "== busca"
+eventually 5 search_has "category=smoke" "$id" || fail "o produto não apareceu na busca em 5 s"
+ok "produto na busca em até 5 s (escrita → RabbitMQ → Elasticsearch)"
+
 code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE -H "Authorization: $supplier" "localhost:18000/products/$id")
 [ "$code" = 204 ] || fail "DELETE respondeu $code"
 code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: $retailer" "localhost:18000/products/$id")
 [ "$code" = 404 ] || fail "GET do produto desativado respondeu $code"
+eventually 5 search_lacks "category=smoke" "$id" || fail "o produto desativado continuou na busca depois de 5 s"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:18000/products)
 [ "$code" = 401 ] || fail "POST sem token respondeu $code"
-ok "criar 201, ler 200, desativar 204, ler 404, sem token 401"
+ok "criar 201, ler 200, desativar 204, ler 404 e fora da busca, sem token 401"
 
 echo "== orders parado"
 docker compose stop orders

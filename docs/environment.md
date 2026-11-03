@@ -10,6 +10,7 @@ Cada serviço lê a configuração do ambiente. Para rodar localmente, copie o `
 | `POSTGRES_DB` | `stockroute` | nome do banco |
 | `CATALOG_DB_PASSWORD`, `ORDERS_DB_PASSWORD`, `INTEGRATION_DB_PASSWORD` | `<serviço>_pw` | senha do role de cada serviço. Entra literal na URL de conexão: use só `[A-Za-z0-9_-]` |
 | `JWT_SECRET` | **sem padrão, obrigatória** | segredo do JWT do gateway; o Compose não sobe sem ela |
+| `RABBITMQ_PASSWORD` | `rabbitmq_pw` | senha do usuário `stockroute` no RabbitMQ. Entra literal na URL do catalog: use só `[A-Za-z0-9_-]` |
 
 ## gateway
 
@@ -31,6 +32,8 @@ Cada serviço lê a configuração do ambiente. Para rodar localmente, copie o `
 | `CATALOG_REDIS_URL` | sem padrão | Redis do cache; **sem ela, o cache fica desligado** e toda leitura vai ao banco |
 | `CATALOG_CACHE_TTL_SECONDS` | `300` | TTL base do produto em cache (varia ± 20%) |
 | `CATALOG_CACHE_NOT_FOUND_TTL_SECONDS` | `30` | TTL do "não existe" em cache |
+| `CATALOG_RABBITMQ_URL` | sem padrão | RabbitMQ dos eventos; **sem ela, os eventos ficam desligados** (a escrita funciona, e o índice não é atualizado) |
+| `CATALOG_ELASTICSEARCH_URL` | sem padrão | Elasticsearch da busca; **sem ela, a busca responde 503** |
 
 Os dois TTLs precisam ser inteiros positivos. Valor inválido impede o catalog de subir, em vez de fazer o cache falhar em silêncio a cada escrita.
 
