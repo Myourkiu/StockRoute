@@ -78,6 +78,22 @@ export class ProductsRepository {
     return toRecord(row);
   }
 
+  // Produtos ativos em ordem de id, a partir do id seguinte a `afterId`. A
+  // paginação por chave (e não por offset) mantém cada página igualmente
+  // barata, e o id único garante que nenhum produto se repita ou se perca.
+  async findActivePage(
+    afterId: string | null,
+    size: number,
+  ): Promise<ProductRecord[]> {
+    const rows = await this.prisma.product.findMany({
+      where: { active: true, ...(afterId && { id: { gt: afterId } }) },
+      orderBy: { id: 'asc' },
+      take: size,
+      include: withVariants,
+    });
+    return rows.map(toRecord);
+  }
+
   async findById(id: string): Promise<ProductRecord | null> {
     const row = await this.prisma.product.findUnique({
       where: { id },
