@@ -92,16 +92,26 @@ export class ProductIndex {
     }
   }
 
+  // Duas instâncias do catalog podem passar juntas pelo `existsAlias`. O alias
+  // aceita um único write index, então a segunda criação é recusada e o índice
+  // dela não nasce; quem perdeu a corrida encontra o alias da outra e segue.
   private async createIfMissing(client: Client): Promise<void> {
     if (await client.indices.existsAlias({ name: PRODUCTS_ALIAS })) {
       return;
     }
-    await client.indices.create({
-      index: `${PRODUCTS_INDEX_PREFIX}${Date.now()}`,
-      aliases: { [PRODUCTS_ALIAS]: {} },
-      settings: PRODUCT_INDEX_SETTINGS,
-      mappings: PRODUCT_INDEX_MAPPINGS,
-    });
+    try {
+      await client.indices.create({
+        index: `${PRODUCTS_INDEX_PREFIX}${Date.now()}`,
+        aliases: { [PRODUCTS_ALIAS]: { is_write_index: true } },
+        settings: PRODUCT_INDEX_SETTINGS,
+        mappings: PRODUCT_INDEX_MAPPINGS,
+      });
+    } catch (error) {
+      if (await client.indices.existsAlias({ name: PRODUCTS_ALIAS })) {
+        return;
+      }
+      throw error;
+    }
   }
 }
 
