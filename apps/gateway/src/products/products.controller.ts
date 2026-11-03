@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
@@ -15,6 +16,7 @@ import {
   CATALOG_PATTERNS,
   type Actor,
   type CatalogRequest,
+  type ProductSearchPage,
   type ProductView,
 } from '@stockroute/contracts';
 import { catchError, firstValueFrom, throwError, timeout } from 'rxjs';
@@ -25,6 +27,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { CATALOG_CLIENT } from '../clients/clients.constants';
 import { toHttpException } from '../common/rpc-to-http';
 import { CreateProductDto } from './dto/create-product.dto';
+import { SearchProductsQuery } from './dto/search-products.query';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { UpdateVariantDto, VariantDto } from './dto/variant.dto';
 
@@ -46,6 +49,16 @@ export class ProductsController {
     @Body() body: CreateProductDto,
   ): Promise<ProductView> {
     return this.send(CATALOG_PATTERNS.create, { actor, data: body });
+  }
+
+  // Declarada antes de `:id`: senão "search" seria lido como um id, e a busca
+  // responderia 404.
+  @Get('search')
+  search(
+    @CurrentActor() actor: Actor,
+    @Query() query: SearchProductsQuery,
+  ): Promise<ProductSearchPage> {
+    return this.send(CATALOG_PATTERNS.search, { actor, data: query });
   }
 
   @Get(':id')
