@@ -11,7 +11,9 @@ import {
   type CatalogRequest,
   type CreateProductData,
   type ProductIdData,
+  type ProductSearchPage,
   type ProductView,
+  type SearchProductsData,
 } from '@stockroute/contracts';
 import type { AddressInfo, Server } from 'node:net';
 import { firstValueFrom } from 'rxjs';
@@ -20,6 +22,10 @@ import {
   ProductNotFoundError,
   SkuConflictError,
 } from './product.errors';
+import {
+  InvalidCursorError,
+  SearchUnavailableError,
+} from '../search/search.errors';
 import { ProductsController } from './products.controller';
 import { ProductsService } from './products.service';
 
@@ -85,6 +91,10 @@ describe('ProductsController (TCP)', () => {
       ReturnType<ProductsService['get']>,
       Parameters<ProductsService['get']>
     >(),
+    search: jest.fn<
+      ReturnType<ProductsService['search']>,
+      Parameters<ProductsService['search']>
+    >(),
   };
   let server: INestMicroservice;
   let client: ClientProxy;
@@ -148,5 +158,56 @@ describe('ProductsController (TCP)', () => {
     await expect(
       firstValueFrom(client.send(CATALOG_PATTERNS.get, getRequest)),
     ).rejects.toEqual({ status: 500, message: 'Internal error' });
+  });
+
+  // Busca (fatia 3, T04): mesma resposta para lojista e fornecedor; cursor
+  // inválido é erro do cliente (400), e o índice fora é indisponibilidade (503).
+  describe('catalog.product.search', () => {
+    const page: ProductSearchPage = {
+      items: [
+        {
+          id: view.id,
+          supplierId: view.supplierId,
+          name: 'Camiseta',
+          description: 'Algodão',
+          category: 'vestuario',
+          tags: [],
+          minPriceCents: 1990,
+          maxPriceCents: 1990,
+        },
+      ],
+      nextCursor: 'eyJ2IjoxfQ',
+    };
+    const filters: SearchProductsData = { q: 'camiseta', limit: 20 };
+
+    it.each([
+      ['lojista', { role: 'retailer' } as Actor],
+      ['fornecedor', actor],
+    ])('com ator %s → página no formato do contrato', async (_label, who) => {
+      service.search.mockResolvedValue(page);
+
+      const response = await firstValueFrom(
+        client.send<ProductSearchPage>(CATALOG_PATTERNS.search, {
+          actor: who,
+          data: filters,
+        }),
+      );
+
+      expect(response).toEqual(page);
+      expect(service.search).toHaveBeenCalledWith(filters);
+    });
+
+    it.each([
+      ['InvalidCursorError', new InvalidCursorError(), 400],
+      ['SearchUnavailableError', new SearchUnavailableError(), 503],
+    ])('%s vira erro com status %i', async (_name, error, status) => {
+      service.search.mockRejectedValue(error);
+
+      await expect(
+        firstValueFrom(
+          client.send(CATALOG_PATTERNS.search, { actor, data: filters }),
+        ),
+      ).rejects.toEqual({ status, message: error.message });
+    });
   });
 });

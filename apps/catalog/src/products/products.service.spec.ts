@@ -1,6 +1,7 @@
 import type { Actor, ProductView, VariantInput } from '@stockroute/contracts';
 import type { ProductCache } from '../cache/product-cache';
 import type { ProductEvents } from '../events/product-events';
+import type { ProductIndex } from '../search/product-index';
 import {
   ForbiddenActionError,
   ProductNotFoundError,
@@ -92,22 +93,34 @@ function mockEvents() {
   return { publishUpserted: jest.fn<void, [string]>() };
 }
 
+function mockIndex() {
+  return {
+    search: jest.fn<
+      ReturnType<ProductIndex['search']>,
+      Parameters<ProductIndex['search']>
+    >(),
+  };
+}
+
 // Regras do catálogo (T03) com o repositório mockado: posse, visibilidade de
 // produto inativo e desativação idempotente.
 describe('ProductsService', () => {
   let repository: ReturnType<typeof mockRepository>;
   let cache: ReturnType<typeof mockCache>;
   let events: ReturnType<typeof mockEvents>;
+  let index: ReturnType<typeof mockIndex>;
   let service: ProductsService;
 
   beforeEach(() => {
     repository = mockRepository();
     cache = mockCache();
     events = mockEvents();
+    index = mockIndex();
     service = new ProductsService(
       repository as unknown as ProductsRepository,
       cache as unknown as ProductCache,
       events as unknown as ProductEvents,
+      index as unknown as ProductIndex,
     );
   });
 
@@ -557,5 +570,14 @@ describe('ProductsService', () => {
         expect(events.publishUpserted).not.toHaveBeenCalled();
       },
     );
+  });
+
+  // Busca (fatia 3, T04): a mesma para qualquer papel, direto no índice.
+  it('search devolve a página do índice para os filtros recebidos', async () => {
+    const page = { items: [], nextCursor: null };
+    index.search.mockResolvedValue(page);
+
+    await expect(service.search({ q: 'camiseta' })).resolves.toBe(page);
+    expect(index.search).toHaveBeenCalledWith({ q: 'camiseta' });
   });
 });
