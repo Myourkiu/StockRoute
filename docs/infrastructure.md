@@ -116,8 +116,10 @@ As portas internas só aparecem no host quando os processos rodam fora do Docker
 4. cache: chave do produto no Redis com TTL entre 240 e 360 s, e o GET ainda funcionando com o Redis parado;
 5. busca: o produto criado aparece na busca em até 5 s, e sai dela em até 5 s depois de desativado;
 6. `GET /health` 503 com o orders parado e os demais `up`;
-7. imagem de execução sem CLI do Prisma, sem `.ts` e sem root;
-8. só as portas 18000 e 18432 publicadas;
-9. `down` e `up` sem apagar dados, com os três migrators dizendo que não há migration pendente.
+7. RabbitMQ parado: criar responde 201; com ele de volta, `npm run catalog:reindex` roda no container e o produto está na busca, e um produto novo chega à busca sem reindexar (o consumidor reconecta sozinho);
+8. Elasticsearch parado: busca 503, GET por id 200, e o catalog continua `up`;
+9. imagem de execução sem CLI do Prisma, sem `.ts` e sem root, e com `amqplib`, `amqp-connection-manager` e `@elastic/elasticsearch`;
+10. só as portas 18000 e 18432 publicadas;
+11. `down` e `up` sem apagar dados, com os três migrators dizendo que não há migration pendente.
 
 Sem `.env` nem `JWT_SECRET` no ambiente, o smoke gera um segredo aleatório. O smoke roda localmente e ainda não faz parte do CI.

@@ -72,9 +72,9 @@ A busca tem um índice próprio no Elasticsearch, mantido a partir do banco por 
 | Ack sempre, sem requeue | sem dead-letter queue, devolver a mensagem para a fila a faria voltar em loop |
 | Fila durável, mensagem persistente | um restart do broker não apaga eventos ainda não consumidos |
 
-**Dual write, de propósito.** Gravar no banco e publicar o evento são dois passos não atômicos. Se o processo cair entre eles, ou o broker estiver fora, o evento se perde, e o produto fica desatualizado no índice até a próxima escrita dele ou até a reindexação. O outbox (Etapa 3) resolve isso de vez.
+**Dual write, de propósito.** Gravar no banco e publicar o evento são dois passos não atômicos. Se o processo cair entre eles, ou o broker estiver fora, o evento se perde, e o produto fica desatualizado no índice até a próxima escrita dele ou até a [reindexação](#reindexação). O outbox (Etapa 3) resolve isso de vez.
 
-O índice é o alias `products`, que aponta para um índice real `products_<timestamp>`. O catalog cria os dois na subida, em segundo plano, e antes da primeira gravação, se ainda não existirem. A reindexação vai construir um índice novo ao lado e trocar o alias.
+O índice é o alias `products`, que aponta para um índice real `products_<timestamp>` (o write index do alias). O catalog cria os dois na subida, em segundo plano, e antes da primeira gravação, se ainda não existirem. Duas instâncias subindo juntas não criam dois índices: o alias aceita um único write index, e a segunda criação é recusada. A [reindexação](#reindexação) constrói um índice novo ao lado e troca o alias.
 
 | Campo | Tipo | Para quê |
 |---|---|---|
@@ -96,6 +96,28 @@ O mapping é estrito (campo desconhecido é erro), com um shard e nenhuma répli
 - **Resultado:** id, fornecedor, nome, descrição, categoria, tags, menor e maior preço. O estoque não vem na busca: o índice não recebe evento de estoque. Ele vem no GET por id.
 
 **Falha segura:** o cliente do Elasticsearch corta em 2 s e não repete a chamada. Com o ES fora ou travado, a busca responde 503, e o GET por id e a escrita continuam funcionando. Sem o alias (nada indexado ainda), a busca devolve página vazia. Com o RabbitMQ fora, a escrita responde normalmente e o índice fica para trás.
+
+## Reindexação
+
+O índice é uma cópia descartável: pode ser reconstruído inteiro a partir do Postgres, sem a busca sair do ar.
+
+```bash
+npm run catalog:reindex   # com o Compose de pé; roda `node dist/main.js reindex` no container do catalog
+```
+
+O comando sobe um contexto do Nest sem TCP, HTTP nem consumidor e:
+
+1. cria um índice novo `products_<timestamp>`, ao lado do atual;
+2. preenche em lotes de 500 produtos ativos, lidos do Postgres em ordem de id (paginação por chave, não por offset);
+3. faz `refresh`, para tudo ficar visível de uma vez;
+4. troca o alias `products` num único `updateAliases` (tira dos antigos e põe no novo, atomicamente);
+5. apaga os índices antigos.
+
+Até a troca, a busca responde com o índice antigo. Se algo falhar antes dela (banco, ES, item rejeitado no bulk), o índice novo é apagado, nada muda para quem busca, e o comando sai com código 1. Depois da troca, uma falha ao apagar um índice antigo só gera aviso.
+
+**Quando rodar:** depois de o RabbitMQ ficar fora durante escritas (eventos perdidos), quando o índice divergir do banco, ou quando o mapping mudar.
+
+**Limite:** um evento indexado no índice antigo enquanto os lotes rodam se perde na troca. A janela é pequena, e rodar de novo corrige. Escrever nos dois índices durante a reindexação fecharia a janela.
 
 O catalog sobe e fica pronto sem o RabbitMQ e sem o ES. O consumidor e a criação do índice começam em segundo plano e conectam quando eles voltarem. As conexões ao RabbitMQ têm timeout de 5 s, para um broker travado não segurar o shutdown.
 

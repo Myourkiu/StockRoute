@@ -16,6 +16,7 @@ npm run test                 # unitários, sem Docker
 npm run test:e2e             # e2e e integração (Testcontainers, precisa do Docker)
 npm run build                # os 5 apps
 npm run token -- supplier <uuid>   # JWT de desenvolvimento (ou: retailer)
+npm run catalog:reindex      # reconstrói o índice de busca (com o Compose de pé)
 bash scripts/smoke.sh        # sobe tudo no Compose e confere ponta a ponta
 ```
 
