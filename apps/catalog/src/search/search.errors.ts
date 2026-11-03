@@ -8,3 +8,12 @@ export class InvalidCursorError extends Error {
     this.name = 'InvalidCursorError';
   }
 }
+
+// O Elasticsearch não respondeu (fora, travado ou desligado). A busca responde
+// 503; o GET por id e a escrita não dependem dele.
+export class SearchUnavailableError extends Error {
+  constructor(cause?: unknown) {
+    super('Search unavailable', { cause });
+    this.name = 'SearchUnavailableError';
+  }
+}
