@@ -44,7 +44,7 @@ Visão completa: [docs/architecture.md](docs/architecture.md).
 8. **Segredo só por variável de ambiente, nunca com valor padrão versionado.** O Compose exige `JWT_SECRET`; o `.env.example` traz só valores de desenvolvimento. [docs/environment.md](docs/environment.md)
 9. **Portas dos serviços na faixa 18000–18299.** A única exceção é a porta do Postgres no host, 18432, presa a 127.0.0.1. Só o gateway (18000) e o Postgres são publicados no host. Serviço novo não ganha porta no host. [docs/infrastructure.md](docs/infrastructure.md#portas)
 10. **Teste antes do código, no nível que prova o comportamento.** Regra de negócio em unitário; transação, unicidade, TTL e falha de dependência só com Postgres e Redis reais (Testcontainers); fluxo da API em e2e pelo gateway. Um teste que deveria falhar precisa ser visto falhando. [docs/development.md](docs/development.md)
-11. **Um PR por fatia; a `main` é protegida.** Commits em Conventional Commits, em inglês, só o título. O CI precisa passar, e o CodeRabbit revisa. [docs/development.md](docs/development.md#fluxo-de-trabalho)
+11. **PRs pequenos, em geral uma task cada; a `main` é protegida.** Uma fatia vira vários PRs, e cada um deixa a `main` verde. Commits em Conventional Commits, em inglês, só o título. O CI precisa passar, e o CodeRabbit revisa. [docs/development.md](docs/development.md#fluxo-de-trabalho)
 
 ## Armadilhas
 

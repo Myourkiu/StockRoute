@@ -70,8 +70,8 @@ Os arquivos que pedem revisão humana obrigatória (**gate humano**) são destac
 
 ## Fluxo de trabalho
 
-- **Um PR por fatia** de funcionalidade, a partir da `main` atualizada, em branches como `feat/<fatia>`, `fix/<tema>`, `chore/<tema>` ou `docs/<tema>`.
-- **A descrição do PR** traz o plano da fatia, a lista dos testes para revisar primeiro, o que foi feito e por quê, os pontos de gate humano e como verificar.
+- **PRs pequenos, revisáveis rápido:** em geral uma task do plano por PR, juntando só tasks pequenas e acopladas, em torno de 300–500 linhas de diff com os testes. Uma fatia de funcionalidade vira vários PRs, e cada um deixa a `main` verde. Branches a partir da `main` atualizada, como `feat/<tema>`, `fix/<tema>`, `chore/<tema>` ou `docs/<tema>`.
+- **A descrição do PR** traz o plano do PR e onde ele entra na fatia, a lista dos testes para revisar primeiro, o que foi feito e por quê, os pontos de gate humano e como verificar.
 - **Commits** em Conventional Commits, em inglês, só o título (`type(scope): description`), um por responsabilidade.
 - **Erros da IA** pegos no caminho vão para [ai-errors.md](ai-errors.md); se virarem regra, também para o [CLAUDE.md](../CLAUDE.md).
 
